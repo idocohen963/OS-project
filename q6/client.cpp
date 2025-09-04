@@ -42,22 +42,24 @@ int main(int argc, char **argv)
     std::string host = "127.0.0.1";
     int port = 8080;
     int vertices = -1, edges = -1, seed = -1;
+    bool directed = false;
     int opt;
 
-    while ((opt = getopt(argc, argv, "v:e:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "v:e:s:d")) != -1) {
         switch (opt) {
             case 'v': vertices = std::stoi(optarg); break;
             case 'e': edges = std::stoi(optarg); break;
             case 's': seed = std::stoi(optarg); break;
+            case 'd': directed = true; break; 
             default:
-                std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed\n";
+                std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d]\n";
                 return 1;
         }
     }
 
     // Check that all required parameters were provided 
     if (vertices == -1 || edges == -1 ||  seed == -1) {
-        std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed\n";
+        std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d]\n";
         return 1;
     }
 
@@ -67,7 +69,7 @@ int main(int argc, char **argv)
     }
 
     std::ostringstream req;
-    req << vertices << ' ' << edges << ' ' << seed << "\n";
+    req << vertices << ' ' << edges << ' ' << seed << ' ' << directed << "\n";
 
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)

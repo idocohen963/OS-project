@@ -35,7 +35,9 @@ int main(int argc, char* argv[])  {
     }
     
     // Ensure edge count does not exceed the maximum possible for given vertices
-    int maxEdges = vertices * (vertices - 1) / 2;
+    int maxEdges = directed
+                       ? vertices * (vertices - 1)      // directed graph
+                       : vertices * (vertices - 1) / 2; // undirected graph
     if (edges > maxEdges) {
         throw std::invalid_argument("Too many edges for the given number of vertices.");
     }

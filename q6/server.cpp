@@ -33,9 +33,10 @@
 
 struct ParsedRequest
 {
-    int v{}; // vertices
-    int e{}; // edges
-    int s{}; // for seed
+    int v{};         // vertices
+    int e{};         // edges
+    int s{};         // for seed
+    bool directed{}; // for directed or undirected graph
 };
 
 static std::string trim(const std::string &s)
@@ -53,9 +54,16 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
     ParsedRequest r;
     if (!(in >> r.v >> r.e >> r.s))
     {
-        err = "Usage: -v <vertices> -e <edges> -s <seed>\n";
+        err = "Usage: -v vertices -e edges -s seed [-d] \n";
         return std::nullopt;
     }
+    
+    int dirFlag;
+    if (in >> dirFlag)
+    {
+        r.directed = (dirFlag != 0);
+    }
+
     if (r.v <= 0 || r.e < 0)
     {
         err = " parameters not actual or positive numbers.";
@@ -66,15 +74,20 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
     return std::nullopt;
 }
 
-static Graph::Graph build_random_graph(int vertices, int edges, int seed)
+static Graph::Graph build_random_graph(int vertices, int edges, int seed, bool directed)
 {
     if (vertices <= 0 || edges < 0)
         throw std::invalid_argument("Invalid vertices or edges");
-    if (edges > vertices * (vertices - 1) / 2)
-        throw std::invalid_argument("Too many edges for simple undirected graph");
+
+    int maxEdges = directed
+                       ? vertices * (vertices - 1)      // directed graph
+                       : vertices * (vertices - 1) / 2; // undirected graph
+
+    if (edges > maxEdges)
+        throw std::invalid_argument("Too many edges for the given number of vertices");
 
     // Create a graph with x vertices as input
-    Graph::Graph g(vertices);
+    Graph::Graph g(vertices, directed);
 
     // set random values:
     //  Initialize random number generator with the user-provided seed
@@ -156,7 +169,7 @@ static void handle_client(int cfd)
     try
     {
         // Build the graph
-        Graph::Graph g = build_random_graph(parsed->v, parsed->e, parsed->s);
+        Graph::Graph g = build_random_graph(parsed->v, parsed->e, parsed->s, parsed->directed);
 
         std::ostringstream out;
         out << g.getGraph();
