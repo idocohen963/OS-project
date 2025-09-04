@@ -25,7 +25,7 @@ int main(int argc, char* argv[])  {
 
     // Check that all required parameters were provided 
     if (vertices == -1 || edges == -1 ||  seed == -1) {
-        std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed\n";
+        std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d] \n";
         return 1;
     }
 
