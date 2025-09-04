@@ -5,15 +5,14 @@ OBJS = $(SRCS:.cpp=.o)
 TARGET = demo
 
 all: $(TARGET)
-	./demo
 
-$(TARGET): Graph.o main.o
+$(TARGET): ${OBJS}
 	$(CXX) $(CXXFLAGS) -o $(TARGET) $^
 
 %.o: %.cpp Graph.hpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(TARGET) *.o
 
 .PHONY: all clean
