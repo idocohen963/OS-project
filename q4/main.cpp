@@ -8,15 +8,17 @@
 
 int main(int argc, char* argv[])  {
     int vertices = -1, edges = -1, seed = -1;
+    bool directed = false;
     int opt;
 
-    while ((opt = getopt(argc, argv, "v:e:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "v:e:s:d")) != -1) {
         switch (opt) {
             case 'v': vertices = std::stoi(optarg); break;
             case 'e': edges = std::stoi(optarg); break;
             case 's': seed = std::stoi(optarg); break;
+            case 'd': directed = true; break; 
             default:
-                std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed\n";
+                std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d] \n";
                 return 1;
         }
     }
@@ -32,9 +34,15 @@ int main(int argc, char* argv[])  {
         throw std::invalid_argument(" parameters not actual or positive numbers.");
     }
     
+    // Ensure edge count does not exceed the maximum possible for given vertices
+    int maxEdges = vertices * (vertices - 1) / 2;
+    if (edges > maxEdges) {
+        throw std::invalid_argument("Too many edges for the given number of vertices.");
+    }
+    
     
     // Create a graph with x vertices as input
-    Graph::Graph g(vertices);
+    Graph::Graph g(vertices, directed);
 
     //set random values:
     // Initialize random number generator with the user-provided seed
