@@ -44,3 +44,5 @@
 *.vscode
 
 demo
+server
+client
