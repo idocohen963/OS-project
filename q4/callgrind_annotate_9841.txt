@@ -1,0 +1,211 @@
+--------------------------------------------------------------------------------
+Profile data file 'callgrind.out.9841' (creator: callgrind-3.22.0)
+--------------------------------------------------------------------------------
+I1 cache: 32768 B, 64 B, 8-way associative
+D1 cache: 32768 B, 64 B, 8-way associative
+LL cache: 16777216 B, 64 B, direct-mapped
+Timerange: Basic block 0 - 346930
+Trigger: Program termination
+Profiled target:  ./demo -v 3 -e 2 -s 5 (PID 9841, part 1)
+Events recorded:  Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw
+Events shown:     Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw
+Event sort order: Ir Dr Dw I1mr D1mr D1mw ILmr DLmr DLmw
+Thresholds:       99 0 0 0 0 0 0 0 0
+Include dirs:     
+User annotated:   
+Auto-annotation:  on
+
+--------------------------------------------------------------------------------
+Ir                 Dr               Dw               I1mr           D1mr            D1mw           ILmr           DLmr           DLmw           
+--------------------------------------------------------------------------------
+1,938,207 (100.0%) 510,011 (100.0%) 182,444 (100.0%) 2,228 (100.0%) 13,345 (100.0%) 2,725 (100.0%) 2,125 (100.0%) 7,236 (100.0%) 1,767 (100.0%)  PROGRAM TOTALS
+
+--------------------------------------------------------------------------------
+Ir               Dr               Dw              I1mr         D1mr           D1mw           ILmr        DLmr           DLmw          file:function
+--------------------------------------------------------------------------------
+498,608 (25.73%) 177,065 (34.72%) 68,018 (37.28%)  36 ( 1.62%) 3,973 (29.77%)    68 ( 2.50%) 36 ( 1.69%)   868 (12.00%)  40 ( 2.26%)  ./elf/./elf/dl-lookup.c:do_lookup_x [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+491,094 (25.34%)  81,530 (15.99%)      0            3 ( 0.13%) 1,943 (14.56%)     0           2 ( 0.09%) 1,644 (22.72%)   .           ./elf/../sysdeps/generic/dl-new-hash.h:_dl_lookup_symbol_x
+185,267 ( 9.56%)  51,510 (10.10%) 43,954 (24.09%)  11 ( 0.49%)    19 ( 0.14%)    22 ( 0.81%) 11 ( 0.52%)     1 ( 0.01%)   3 ( 0.17%)  ./elf/./elf/dl-lookup.c:_dl_lookup_symbol_x [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+146,867 ( 7.58%)  32,324 ( 6.34%) 17,338 ( 9.50%)  30 ( 1.35%) 1,857 (13.92%)   203 ( 7.45%) 30 ( 1.41%) 1,354 (18.71%) 195 (11.04%)  ./elf/./elf/dl-reloc.c:_dl_relocate_object [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+112,765 ( 5.82%)  36,312 ( 7.12%) 13,419 ( 7.36%)   6 ( 0.27%)   483 ( 3.62%)    12 ( 0.44%)  6 ( 0.28%)   256 ( 3.54%)   3 ( 0.17%)  ./elf/./elf/dl-lookup.c:check_match [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+111,456 ( 5.75%)  28,275 ( 5.54%)  5,846 ( 3.20%)  21 ( 0.94%)   636 ( 4.77%) 1,604 (58.86%) 21 ( 0.99%)   617 ( 8.53%) 864 (48.90%)  ./elf/../sysdeps/x86_64/dl-machine.h:_dl_relocate_object
+110,454 ( 5.70%)  34,625 ( 6.79%) 10,789 ( 5.91%)  17 ( 0.76%) 2,744 (20.56%)     2 ( 0.07%) 17 ( 0.80%) 1,758 (24.30%)   .           ./elf/./elf/do-rel.h:_dl_relocate_object
+ 68,263 ( 3.52%)  16,636 ( 3.26%)      0          100 ( 4.49%)   266 ( 1.99%)     0          69 ( 3.25%)   124 ( 1.71%)   .           ./string/../sysdeps/x86_64/multiarch/../multiarch/strcmp-sse2.S:strcmp [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+ 25,221 ( 1.30%)   4,302 ( 0.84%)      6 ( 0.00%)   6 ( 0.27%)    66 ( 0.49%)     0           6 ( 0.28%)    66 ( 0.91%)   .           ./elf/./elf/dl-tunables.c:__GI___tunables_init [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+ 15,654 ( 0.81%)   5,511 ( 1.08%)  1,154 ( 0.63%)  23 ( 1.03%)   103 ( 0.77%)    76 ( 2.79%) 23 ( 1.08%)    94 ( 1.30%)  73 ( 4.13%)  ./elf/./elf/dl-version.c:_dl_check_map_versions [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+ 12,192 ( 0.63%)   3,552 ( 0.70%)    320 ( 0.18%)   6 ( 0.27%)     0              0           6 ( 0.28%)     .            .           ???:std::locale::_Impl::_M_install_facet(std::locale::id const*, std::locale::facet const*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+ 10,427 ( 0.54%)   3,485 ( 0.68%)      0            1 ( 0.04%)     0              0           1 ( 0.05%)     .            .           ./elf/../sysdeps/generic/ldsodefs.h:_dl_relocate_object
+  9,475 ( 0.49%)   1,895 ( 0.37%)      .            .              .              .           .              .            .           ./elf/../sysdeps/generic/ldsodefs.h:do_lookup_x
+  9,216 ( 0.48%)   2,944 ( 0.58%)  1,408 ( 0.77%)   4 ( 0.18%)     4 ( 0.03%)     0           4 ( 0.19%)     .            .           ./wcsmbs/./wcsmbs/btowc.c:btowc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  7,580 ( 0.39%)       .               .            .              .              .           .              .            .           ./elf/../sysdeps/generic/dl-protected.h:do_lookup_x
+  7,421 ( 0.38%)   1,057 ( 0.21%)    427 ( 0.23%)   4 ( 0.18%)     2 ( 0.01%)     0           4 ( 0.19%)     2 ( 0.03%)   .           ???:std::mersenne_twister_engine<unsigned long, 32ul, 624ul, 397ul, 31ul, 2567483615ul, 11ul, 4294967295ul, 7ul, 2636928640ul, 15ul, 4022730752ul, 18ul, 1812433253ul>::_M_gen_rand() [/home/idoc/projects/os_4/q4/demo]
+  7,231 ( 0.37%)   2,628 ( 0.52%)    805 ( 0.44%)   8 ( 0.36%)   223 ( 1.67%)     1 ( 0.04%)  8 ( 0.38%)    42 ( 0.58%)   .           ./elf/./elf/dl-runtime.c:_dl_fixup [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  5,896 ( 0.30%)      30 ( 0.01%)    675 ( 0.37%)  14 ( 0.63%)     0             51 ( 1.87%) 13 ( 0.61%)     .            .           ???:main [/home/idoc/projects/os_4/q4/demo]
+  3,856 ( 0.20%)     807 ( 0.16%)    401 ( 0.22%)  43 ( 1.93%)    75 ( 0.56%)    23 ( 0.84%) 43 ( 2.02%)    74 ( 1.02%)  23 ( 1.30%)  ./elf/./elf/dl-load.c:_dl_map_object_from_fd [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  3,208 ( 0.17%)     942 ( 0.18%)    597 ( 0.33%)   2 ( 0.09%)     0              1 ( 0.04%)  2 ( 0.09%)     0            1 ( 0.06%)  ./elf/./elf/dl-misc.c:_dl_name_match_p [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  3,200 ( 0.17%)   1,024 ( 0.20%)    640 ( 0.35%)   2 ( 0.09%)     0              0           2 ( 0.09%)     .            .           ./wcsmbs/./wcsmbs/wctob.c:wctob [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  3,150 ( 0.16%)     469 ( 0.09%)      0            4 ( 0.18%)    28 ( 0.21%)     0           4 ( 0.19%)    28 ( 0.39%)   .           ./elf/./elf/dl-cache.c:_dl_cache_libcmp [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  3,096 ( 0.16%)     492 ( 0.10%)     96 ( 0.05%)  10 ( 0.45%)     6 ( 0.04%)     0          10 ( 0.47%)     6 ( 0.08%)   .           ./elf/../sysdeps/x86/dl-cacheinfo.h:intel_check_word.constprop.0 [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  2,993 ( 0.15%)   3,431 ( 0.67%)  3,723 ( 2.04%)   4 ( 0.18%)     0             20 ( 0.73%)  4 ( 0.19%)     0            1 ( 0.06%)  ./elf/../sysdeps/x86_64/dl-trampoline.h:_dl_runtime_resolve_xsave [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  2,745 ( 0.14%)     711 ( 0.14%)      0            1 ( 0.04%)     1 ( 0.01%)     0           1 ( 0.05%)     1 ( 0.01%)   .           ./elf/./elf/dl-tunables.h:__GI___tunables_init
+  2,736 ( 0.14%)       6 ( 0.00%)    811 ( 0.44%)   5 ( 0.22%)     0             20 ( 0.73%)  5 ( 0.24%)     0           20 ( 1.13%)  ???:std::ctype<wchar_t>::_M_initialize_ctype() [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+  2,378 ( 0.12%)     411 ( 0.08%)    230 ( 0.13%)  30 ( 1.35%)    11 ( 0.08%)     7 ( 0.26%) 30 ( 1.41%)     1 ( 0.01%)   7 ( 0.40%)  ./elf/./elf/dl-deps.c:_dl_map_object_deps [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  2,367 ( 0.12%)     574 ( 0.11%)    332 ( 0.18%)  31 ( 1.39%)     1 ( 0.01%)     8 ( 0.29%) 31 ( 1.46%)     1 ( 0.01%)   8 ( 0.45%)  ./elf/./elf/dl-load.c:_dl_map_object [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  2,268 ( 0.12%)       0               0            1 ( 0.04%)     0              0           1 ( 0.05%)     .            .           ./elf/../bits/stdlib-bsearch.h:intel_check_word.constprop.0
+  1,809 ( 0.09%)     255 ( 0.05%)    184 ( 0.10%)  10 ( 0.45%)    44 ( 0.33%)    34 ( 1.25%) 10 ( 0.47%)    44 ( 0.61%)  34 ( 1.92%)  ./elf/./elf/get-dynamic-info.h:_dl_map_object_from_fd
+  1,702 ( 0.09%)     364 ( 0.07%)    252 ( 0.14%)   7 ( 0.31%)     2 ( 0.01%)     0           7 ( 0.33%)     2 ( 0.03%)   .           ./libio/./libio/fileops.c:_IO_file_xsputn@@GLIBC_2.2.5 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  1,595 ( 0.08%)     476 ( 0.09%)    309 ( 0.17%)   4 ( 0.18%)     4 ( 0.03%)     0           4 ( 0.19%)     1 ( 0.01%)   .           ./libio/./libio/iofwrite.c:fwrite [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  1,473 ( 0.08%)     261 ( 0.05%)    151 ( 0.08%)  40 ( 1.80%)     6 ( 0.04%)    11 ( 0.40%) 40 ( 1.88%)     1 ( 0.01%)   9 ( 0.51%)  ./malloc/./malloc/malloc.c:_int_malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  1,339 ( 0.07%)     301 ( 0.06%)    304 ( 0.17%)   7 ( 0.31%)     4 ( 0.03%)     0           6 ( 0.28%)     1 ( 0.01%)   .           ./elf/./elf/dl-minimal-malloc.c:__minimal_malloc [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  1,260 ( 0.07%)     283 ( 0.06%)    144 ( 0.08%)  65 ( 2.92%)    52 ( 0.39%)    12 ( 0.44%) 65 ( 3.06%)    20 ( 0.28%)   6 ( 0.34%)  ./elf/./elf/rtld.c:dl_main [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  1,238 ( 0.06%)     225 ( 0.04%)    132 ( 0.07%)  18 ( 0.81%)    26 ( 0.19%)     1 ( 0.04%) 18 ( 0.85%)    25 ( 0.35%)   1 ( 0.06%)  ./elf/./elf/dl-cache.c:_dl_load_cache_lookup [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  1,116 ( 0.06%)     230 ( 0.05%)    215 ( 0.12%)  17 ( 0.76%)     7 ( 0.05%)    37 ( 1.36%) 16 ( 0.75%)     7 ( 0.10%)  37 ( 2.09%)  ./elf/./elf/dl-object.c:_dl_new_object [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+  1,095 ( 0.06%)     242 ( 0.05%)      0            7 ( 0.31%)     0              0           6 ( 0.28%)     .            .           ./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S:__memcmp_avx2_movbe [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  1,066 ( 0.05%)     168 ( 0.03%)    187 ( 0.10%)   3 ( 0.13%)     4 ( 0.03%)     0           3 ( 0.14%)     .            .           ./wctype/./wctype/wctype_l.c:wctype_l [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  1,044 ( 0.05%)     149 ( 0.03%)      0            3 ( 0.13%)     7 ( 0.05%)     0           3 ( 0.14%)     7 ( 0.10%)   .           ./string/../sysdeps/x86_64/multiarch/strlen-avx2.S:__strlen_avx2 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  1,018 ( 0.05%)     198 ( 0.04%)    209 ( 0.11%)   7 ( 0.31%)     3 ( 0.02%)     0           7 ( 0.33%)     .            .           ???:std::ostreambuf_iterator<char, std::char_traits<char> > std::num_put<char, std::ostreambuf_iterator<char, std::char_traits<char> > >::_M_insert_int<long>(std::ostreambuf_iterator<char, std::char_traits<char> >, std::ios_base&, char, long) const [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+  1,014 ( 0.05%)     338 ( 0.07%)     96 ( 0.05%)   2 ( 0.09%)     8 ( 0.06%)     0           2 ( 0.09%)     7 ( 0.10%)   .           ???:std::locale::id::_M_id() const [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    969 ( 0.05%)     408 ( 0.08%)    221 ( 0.12%)   6 ( 0.27%)     0              0           6 ( 0.28%)     .            .           ???:std::basic_ostream<char, std::char_traits<char> >& std::__ostream_insert<char, std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*, long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    908 ( 0.05%)     153 ( 0.03%)     39 ( 0.02%)   5 ( 0.22%)    54 ( 0.40%)     0           3 ( 0.14%)    31 ( 0.43%)   .           ./elf/./elf/dl-tunables.c:__tunable_get_val [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    871 ( 0.04%)      12 ( 0.00%)    420 ( 0.23%)   5 ( 0.22%)     0            104 ( 3.82%)  4 ( 0.19%)     0          104 ( 5.89%)  ./string/../sysdeps/x86_64/multiarch/../multiarch/memset-vec-unaligned-erms.S:memset [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    867 ( 0.04%)     315 ( 0.06%)    235 ( 0.13%)   3 ( 0.13%)     2 ( 0.01%)     0           3 ( 0.14%)     .            .           ???:std::ostream::sentry::sentry(std::ostream&) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    814 ( 0.04%)     213 ( 0.04%)    100 ( 0.05%)   6 ( 0.27%)     6 ( 0.04%)     0           6 ( 0.28%)     .            .           ./stdlib/./stdlib/cxa_finalize.c:__cxa_finalize [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    808 ( 0.04%)     113 ( 0.02%)      0            7 ( 0.31%)     5 ( 0.04%)     0           7 ( 0.33%)     5 ( 0.07%)   .           ./string/../sysdeps/x86_64/multiarch/../multiarch/strlen-sse2.S:strlen [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    792 ( 0.04%)      99 ( 0.02%)      0            5 ( 0.22%)     7 ( 0.05%)     0           5 ( 0.24%)     7 ( 0.10%)   .           ./string/../sysdeps/x86_64/multiarch/../multiarch/strchr-sse2.S:index [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    771 ( 0.04%)       0             130 ( 0.07%)   1 ( 0.04%)     0             34 ( 1.25%)  1 ( 0.05%)     0           33 ( 1.87%)  ./malloc/./malloc/malloc.c:ptmalloc_init.part.0
+    768 ( 0.04%)     128 ( 0.03%)      0            1 ( 0.04%)     0              0           1 ( 0.05%)     .            .           ./iconv/./iconv/gconv_simple.c:__gconv_btwoc_ascii [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    754 ( 0.04%)      60 ( 0.01%)     41 ( 0.02%)  11 ( 0.49%)     4 ( 0.03%)     4 ( 0.15%) 11 ( 0.52%)     .            .           ???:std::ctype<char>::_M_widen_init() const [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    722 ( 0.04%)     215 ( 0.04%)    135 ( 0.07%)  15 ( 0.67%)     1 ( 0.01%)     6 ( 0.22%) 15 ( 0.71%)     1 ( 0.01%)   6 ( 0.34%)  ./elf/./elf/dl-load.c:open_path [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    695 ( 0.04%)     212 ( 0.04%)     57 ( 0.03%)   8 ( 0.36%)     0              2 ( 0.07%)  8 ( 0.38%)     0            2 ( 0.11%)  ./elf/./dl-map-segments.h:_dl_map_object_from_fd
+    673 ( 0.03%)      89 ( 0.02%)    385 ( 0.21%)  56 ( 2.51%)    39 ( 0.29%)    49 ( 1.80%) 56 ( 2.64%)     1 ( 0.01%)  49 ( 2.77%)  ???:std::locale::_Impl::_Impl(unsigned long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    659 ( 0.03%)     262 ( 0.05%)    103 ( 0.06%)   8 ( 0.36%)     5 ( 0.04%)     0           8 ( 0.38%)     .            .           ???:std::ostream& std::ostream::_M_insert<long>(long) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    640 ( 0.03%)     384 ( 0.08%)      0            1 ( 0.04%)     0              0           1 ( 0.05%)     .            .           ./elf/./elf/libc-dl-profstub.c:_dl_mcount_wrapper_check [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    638 ( 0.03%)     202 ( 0.04%)     20 ( 0.01%)   3 ( 0.13%)    35 ( 0.26%)     1 ( 0.04%)  3 ( 0.14%)    12 ( 0.17%)   .           ./stdlib/./stdlib/getenv.c:getenv [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    628 ( 0.03%)     146 ( 0.03%)    121 ( 0.07%)  13 ( 0.58%)     2 ( 0.01%)     2 ( 0.07%) 13 ( 0.61%)     2 ( 0.03%)   2 ( 0.11%)  ./elf/./elf/dl-load.c:open_verify.constprop.0 [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    615 ( 0.03%)     161 ( 0.03%)    125 ( 0.07%)   9 ( 0.40%)    14 ( 0.10%)    29 ( 1.06%)  6 ( 0.28%)    12 ( 0.17%)  28 ( 1.58%)  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:memcpy [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    601 ( 0.03%)     109 ( 0.02%)     78 ( 0.04%)   2 ( 0.09%)     0              2 ( 0.07%)  2 ( 0.09%)     0            2 ( 0.11%)  ./misc/../sysdeps/unix/sysv/linux/mmap64.c:mmap [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    548 ( 0.03%)     175 ( 0.03%)     98 ( 0.05%)   6 ( 0.27%)     7 ( 0.05%)     0           3 ( 0.14%)     .            .           ./elf/./elf/dl-sort-maps.c:dfs_traversal.part.0 [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    546 ( 0.03%)     130 ( 0.03%)    182 ( 0.10%)   4 ( 0.18%)     1 ( 0.01%)     3 ( 0.11%)  4 ( 0.19%)     1 ( 0.01%)   3 ( 0.17%)  ./elf/./elf/dl-catch.c:_dl_catch_exception [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    544 ( 0.03%)     133 ( 0.03%)    114 ( 0.06%)   6 ( 0.27%)     1 ( 0.01%)     1 ( 0.04%)  6 ( 0.28%)     1 ( 0.01%)   1 ( 0.06%)  ./elf/./elf/dl-hwcaps_split.c:_dl_hwcaps_split_masked [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    534 ( 0.03%)     178 ( 0.03%)      .            .              .              .           .              .            .           ./elf/../sysdeps/nptl/dl-tls_init_tp.c:rtld_mutex_dummy [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    517 ( 0.03%)     258 ( 0.05%)      2 ( 0.00%)   2 ( 0.09%)     1 ( 0.01%)     0           2 ( 0.09%)     .            .           ???:0x00000000048ecb80 [???]
+    516 ( 0.03%)      96 ( 0.02%)    132 ( 0.07%)   3 ( 0.13%)     0              0           3 ( 0.14%)     .            .           ./elf/../sysdeps/x86/dl-cacheinfo.h:handle_intel.constprop.0 [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    512 ( 0.03%)     256 ( 0.05%)      0            0              2 ( 0.01%)     .           .              .            .           ./wcsmbs/./wcsmbsload.h:btowc
+    490 ( 0.03%)     139 ( 0.03%)     76 ( 0.04%)   8 ( 0.36%)    31 ( 0.23%)     1 ( 0.04%)  5 ( 0.24%)     .            .           ./elf/./elf/dl-init.c:call_init.part.0 [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    484 ( 0.02%)     154 ( 0.03%)    154 ( 0.08%)   3 ( 0.13%)     1 ( 0.01%)     2 ( 0.07%)  3 ( 0.14%)     0            1 ( 0.06%)  ???:std::locale::locale() [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    481 ( 0.02%)     141 ( 0.03%)     80 ( 0.04%)  18 ( 0.81%)     2 ( 0.01%)     2 ( 0.07%) 18 ( 0.85%)     1 ( 0.01%)   .           ./posix/./posix/getopt.c:_getopt_internal_r [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    480 ( 0.02%)       8 ( 0.00%)    192 ( 0.11%)   3 ( 0.13%)     0             30 ( 1.10%)  3 ( 0.14%)     0           17 ( 0.96%)  ???:std::ios_base::ios_base() [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    477 ( 0.02%)      63 ( 0.01%)     36 ( 0.02%)   3 ( 0.13%)     0              0           3 ( 0.14%)     .            .           ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__mempcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    468 ( 0.02%)      96 ( 0.02%)    144 ( 0.08%)   3 ( 0.13%)     0              7 ( 0.26%)  3 ( 0.14%)     0            6 ( 0.34%)  ./stdlib/./stdlib/cxa_atexit.c:__cxa_atexit [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    441 ( 0.02%)     119 ( 0.02%)     28 ( 0.02%)   3 ( 0.13%)    72 ( 0.54%)     5 ( 0.18%)  3 ( 0.14%)     8 ( 0.11%)   4 ( 0.23%)  ./elf/./dl-find_object.h:_dl_find_object_from_map [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    440 ( 0.02%)      96 ( 0.02%)     73 ( 0.04%)   4 ( 0.18%)     3 ( 0.02%)     0           4 ( 0.19%)     1 ( 0.01%)   .           ./stdlib/./stdlib/cxa_atexit.c:__new_exitfn [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    439 ( 0.02%)     121 ( 0.02%)     53 ( 0.03%)   7 ( 0.31%)     2 ( 0.01%)     0           7 ( 0.33%)     1 ( 0.01%)   .           ./malloc/./malloc/malloc.c:malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    432 ( 0.02%)     120 ( 0.02%)     64 ( 0.04%)   6 ( 0.27%)     2 ( 0.01%)     0           6 ( 0.28%)     1 ( 0.01%)   .           ./malloc/./malloc/malloc.c:_int_free [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    420 ( 0.02%)     154 ( 0.03%)     84 ( 0.05%)   6 ( 0.27%)     3 ( 0.02%)     0           6 ( 0.28%)     .            .           ./libio/./libio/iofflush.c:fflush [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    420 ( 0.02%)     112 ( 0.02%)     56 ( 0.03%)   3 ( 0.13%)     0              0           3 ( 0.14%)     .            .           ./libio/./libio/libioP.h:fwrite
+    417 ( 0.02%)     138 ( 0.03%)     76 ( 0.04%)   5 ( 0.22%)     5 ( 0.04%)     0           5 ( 0.24%)     3 ( 0.04%)   .           ???:std::__cxx11::numpunct<char>::_M_initialize_numpunct(__locale_struct*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    417 ( 0.02%)     138 ( 0.03%)     76 ( 0.04%)   5 ( 0.22%)     0              0           5 ( 0.24%)     .            .           ???:std::numpunct<char>::_M_initialize_numpunct(__locale_struct*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    406 ( 0.02%)      84 ( 0.02%)     84 ( 0.05%)   3 ( 0.13%)     0              0           3 ( 0.14%)     .            .           ???:int std::uniform_int_distribution<int>::operator()<std::mersenne_twister_engine<unsigned long, 32ul, 624ul, 397ul, 31ul, 2567483615ul, 11ul, 4294967295ul, 7ul, 2636928640ul, 15ul, 4022730752ul, 18ul, 1812433253ul> >(std::mersenne_twister_engine<unsigned long, 32ul, 624ul, 397ul, 31ul, 2567483615ul, 11ul, 4294967295ul, 7ul, 2636928640ul, 15ul, 4022730752ul, 18ul, 1812433253ul>&, std::uniform_int_distribution<int>::param_type const&) [clone .isra.0] [/home/idoc/projects/os_4/q4/demo]
+    386 ( 0.02%)      73 ( 0.01%)     39 ( 0.02%)  12 ( 0.54%)     8 ( 0.06%)     9 ( 0.33%) 12 ( 0.56%)     8 ( 0.11%)   9 ( 0.51%)  ./elf/./get-dynamic-info.h:dl_main
+    375 ( 0.02%)      75 ( 0.01%)     48 ( 0.03%)   2 ( 0.09%)     1 ( 0.01%)     6 ( 0.22%)  1 ( 0.05%)     0            6 ( 0.34%)  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:mempcpy [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    374 ( 0.02%)      78 ( 0.02%)     50 ( 0.03%)  23 ( 1.03%)     2 ( 0.01%)     0          11 ( 0.52%)     .            .           ./elf/./elf/dl-sort-maps.c:_dl_sort_maps [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    367 ( 0.02%)      57 ( 0.01%)     29 ( 0.02%)   3 ( 0.13%)     0              0           3 ( 0.14%)     .            .           ???:std::mersenne_twister_engine<unsigned long, 32ul, 624ul, 397ul, 31ul, 2567483615ul, 11ul, 4294967295ul, 7ul, 2636928640ul, 15ul, 4022730752ul, 18ul, 1812433253ul>::operator()() [/home/idoc/projects/os_4/q4/demo]
+    364 ( 0.02%)      17 ( 0.00%)     45 ( 0.02%)  40 ( 1.80%)     2 ( 0.01%)     0          40 ( 1.88%)     1 ( 0.01%)   .           ???:__cpu_indicator_init [/usr/lib/x86_64-linux-gnu/libgcc_s.so.1]
+    353 ( 0.02%)      75 ( 0.01%)     75 ( 0.04%)   5 ( 0.22%)     1 ( 0.01%)     3 ( 0.11%)  5 ( 0.24%)     1 ( 0.01%)   3 ( 0.17%)  ???:std::__cxx11::numpunct<wchar_t>::_M_initialize_numpunct(__locale_struct*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    353 ( 0.02%)      75 ( 0.01%)     75 ( 0.04%)   5 ( 0.22%)     0              0           5 ( 0.24%)     .            .           ???:std::numpunct<wchar_t>::_M_initialize_numpunct(__locale_struct*) [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    340 ( 0.02%)       8 ( 0.00%)    304 ( 0.17%)   4 ( 0.18%)     0             39 ( 1.43%)  4 ( 0.19%)     0           39 ( 2.21%)  ./elf/../elf/dl-tls.c:_dl_allocate_tls_storage [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    334 ( 0.02%)      70 ( 0.01%)    125 ( 0.07%)   5 ( 0.22%)     1 ( 0.01%)     2 ( 0.07%)  5 ( 0.24%)     0            2 ( 0.11%)  ./setjmp/../sysdeps/x86_64/setjmp.S:__sigsetjmp [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    318 ( 0.02%)      52 ( 0.01%)     55 ( 0.03%)  17 ( 0.76%)     2 ( 0.01%)     6 ( 0.22%) 17 ( 0.80%)     2 ( 0.03%)   6 ( 0.34%)  ./elf/./elf/dl-load.c:_dl_init_paths [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    315 ( 0.02%)     120 ( 0.02%)     60 ( 0.03%)   3 ( 0.13%)     1 ( 0.01%)     0           3 ( 0.14%)     1 ( 0.01%)   .           ./libio/./libio/fileops.c:_IO_file_sync@@GLIBC_2.2.5 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    309 ( 0.02%)      76 ( 0.01%)     52 ( 0.03%)   7 ( 0.31%)     0              1 ( 0.04%)  7 ( 0.33%)     0            1 ( 0.06%)  ./libio/./libio/fileops.c:_IO_file_overflow@@GLIBC_2.2.5 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    306 ( 0.02%)      66 ( 0.01%)      0            4 ( 0.18%)     6 ( 0.04%)     0           4 ( 0.19%)     6 ( 0.08%)   .           ./elf/./elf/dl-load.c:_dl_process_pt_gnu_property [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    304 ( 0.02%)     106 ( 0.02%)      2 ( 0.00%)   1 ( 0.04%)     0              0           1 ( 0.05%)     .            .           ./elf/./elf/dl-environ.c:_dl_next_ld_env_entry [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    303 ( 0.02%)      51 ( 0.01%)     36 ( 0.02%)   7 ( 0.31%)     4 ( 0.03%)     0           7 ( 0.33%)     1 ( 0.01%)   .           ./stdlib/../stdlib/strtol_l.c:____strtol_l_internal [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    301 ( 0.02%)      68 ( 0.01%)     59 ( 0.03%)   3 ( 0.13%)     0              0           3 ( 0.14%)     .            .           ./elf/./elf/dl-object.c:_dl_add_to_namespace_list [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    298 ( 0.02%)     103 ( 0.02%)    123 ( 0.07%)  26 ( 1.17%)     8 ( 0.06%)     7 ( 0.26%) 26 ( 1.22%)     0            6 ( 0.34%)  ???:0x00000000000ed260 [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    297 ( 0.02%)     143 ( 0.03%)     44 ( 0.02%)   3 ( 0.13%)     4 ( 0.03%)     0           3 ( 0.14%)     .            .           ???:std::ostream::flush() [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    297 ( 0.02%)      62 ( 0.01%)     73 ( 0.04%)  10 ( 0.45%)     6 ( 0.04%)     7 ( 0.26%) 10 ( 0.47%)     .            .           ./elf/./elf/dl-fini.c:_dl_fini [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    297 ( 0.02%)      22 ( 0.00%)     11 ( 0.01%)   2 ( 0.09%)     1 ( 0.01%)     0           2 ( 0.09%)     .            .           ???:0x0000000000146900 [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    282 ( 0.01%)      66 ( 0.01%)     12 ( 0.01%)   4 ( 0.18%)     5 ( 0.04%)     0           4 ( 0.19%)     1 ( 0.01%)   .           ./elf/./elf/dl-find_object.c:_dlfo_process_initial [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    280 ( 0.01%)      45 ( 0.01%)     30 ( 0.02%)   4 ( 0.18%)     0              0           4 ( 0.19%)     .            .           ./elf/./elf/dl-tunables.c:__GI___tunable_set_val [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    276 ( 0.01%)      84 ( 0.02%)     84 ( 0.05%)   2 ( 0.09%)     0              1 ( 0.04%)  2 ( 0.09%)     0            1 ( 0.06%)  ./elf/./elf/dl-load.c:_dl_dst_count [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    275 ( 0.01%)      81 ( 0.02%)     55 ( 0.03%)   4 ( 0.18%)     0              0           4 ( 0.19%)     .            .           ./libio/./libio/fileops.c:_IO_do_write@@GLIBC_2.2.5 [/usr/lib/x86_64-linux-gnu/libc.so.6]
+    274 ( 0.01%)      98 ( 0.02%)     42 ( 0.02%)   7 ( 0.31%)    10 ( 0.07%)     0           7 ( 0.33%)     4 ( 0.06%)   .           ./elf/./elf/dl-lookup-direct.c:_dl_lookup_direct [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    272 ( 0.01%)      48 ( 0.01%)    149 ( 0.08%)  30 ( 1.35%)    11 ( 0.08%)    17 ( 0.62%) 29 ( 1.36%)     1 ( 0.01%)   2 ( 0.11%)  ???:std::ios_base::Init::Init() [/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33]
+    268 ( 0.01%)      41 ( 0.01%)     25 ( 0.01%)  10 ( 0.45%)     6 ( 0.04%)     7 ( 0.26%) 10 ( 0.47%)     6 ( 0.08%)   7 ( 0.40%)  ./elf/./get-dynamic-info.h:_dl_start
+    264 ( 0.01%)     108 ( 0.02%)     48 ( 0.03%)   1 ( 0.04%)     0              0           1 ( 0.05%)     .            .           ./elf/./elf/dl-deps.c:openaux [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    261 ( 0.01%)     130 ( 0.03%)      2 ( 0.00%)   2 ( 0.09%)     1 ( 0.01%)     0           2 ( 0.09%)     .            .           ???:0x00000000048eb040 [???]
+    258 ( 0.01%)      24 ( 0.00%)     30 ( 0.02%)   2 ( 0.09%)     0              3 ( 0.11%)  2 ( 0.09%)     0            3 ( 0.17%)  ./io/../sysdeps/unix/sysv/linux/open64_nocancel.c:__open_nocancel [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    256 ( 0.01%)      49 ( 0.01%)     54 ( 0.03%)   7 ( 0.31%)     0              0           7 ( 0.33%)     .            .           ???:void std::vector<std::pair<int, int>, std::allocator<std::pair<int, int> > >::_M_realloc_insert<std::pair<int, int> >(__gnu_cxx::__normal_iterator<std::pair<int, int>*, std::vector<std::pair<int, int>, std::allocator<std::pair<int, int> > > >, std::pair<int, int>&&) [/home/idoc/projects/os_4/q4/demo]
+    254 ( 0.01%)     120 ( 0.02%)     21 ( 0.01%)   5 ( 0.22%)     2 ( 0.01%)     5 ( 0.18%)  5 ( 0.24%)     2 ( 0.03%)   5 ( 0.28%)  ./string/../string/strcspn.c:strcspn [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    248 ( 0.01%)      77 ( 0.02%)      1 ( 0.00%)   2 ( 0.09%)     1 ( 0.01%)     0           2 ( 0.09%)     1 ( 0.01%)   .           ./elf/./elf/dl-minimal.c:strsep [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    248 ( 0.01%)      46 ( 0.01%)     20 ( 0.01%)   3 ( 0.13%)     0              0           3 ( 0.14%)     .            .           ./elf/./elf/dl-find_object.c:_dlfo_sort_mappings [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+    247 ( 0.01%)      23 ( 0.00%)     37 ( 0.02%)  12 ( 0.54%)     3 ( 0.02%)    11 ( 0.40%) 11 ( 0.52%)     1 ( 0.01%)  11 ( 0.62%)  ./elf/./elf/rtld.c:_dl_start [/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2]
+
+--------------------------------------------------------------------------------
+The following files chosen for auto-annotation could not be found:
+--------------------------------------------------------------------------------
+  ./elf/../bits/stdlib-bsearch.h
+  ./elf/../elf/dl-tls.c
+  ./elf/../sysdeps/generic/dl-new-hash.h
+  ./elf/../sysdeps/generic/dl-protected.h
+  ./elf/../sysdeps/generic/ldsodefs.h
+  ./elf/../sysdeps/nptl/dl-tls_init_tp.c
+  ./elf/../sysdeps/x86/dl-cacheinfo.h
+  ./elf/../sysdeps/x86_64/dl-machine.h
+  ./elf/../sysdeps/x86_64/dl-trampoline.h
+  ./elf/./dl-find_object.h
+  ./elf/./dl-map-segments.h
+  ./elf/./elf/dl-cache.c
+  ./elf/./elf/dl-catch.c
+  ./elf/./elf/dl-deps.c
+  ./elf/./elf/dl-environ.c
+  ./elf/./elf/dl-find_object.c
+  ./elf/./elf/dl-fini.c
+  ./elf/./elf/dl-hwcaps_split.c
+  ./elf/./elf/dl-init.c
+  ./elf/./elf/dl-load.c
+  ./elf/./elf/dl-lookup-direct.c
+  ./elf/./elf/dl-lookup.c
+  ./elf/./elf/dl-minimal-malloc.c
+  ./elf/./elf/dl-minimal.c
+  ./elf/./elf/dl-misc.c
+  ./elf/./elf/dl-object.c
+  ./elf/./elf/dl-reloc.c
+  ./elf/./elf/dl-runtime.c
+  ./elf/./elf/dl-sort-maps.c
+  ./elf/./elf/dl-tunables.c
+  ./elf/./elf/dl-tunables.h
+  ./elf/./elf/dl-version.c
+  ./elf/./elf/do-rel.h
+  ./elf/./elf/get-dynamic-info.h
+  ./elf/./elf/libc-dl-profstub.c
+  ./elf/./elf/rtld.c
+  ./elf/./get-dynamic-info.h
+  ./iconv/./iconv/gconv_simple.c
+  ./io/../sysdeps/unix/sysv/linux/open64_nocancel.c
+  ./libio/./libio/fileops.c
+  ./libio/./libio/iofflush.c
+  ./libio/./libio/iofwrite.c
+  ./libio/./libio/libioP.h
+  ./malloc/./malloc/malloc.c
+  ./misc/../sysdeps/unix/sysv/linux/mmap64.c
+  ./posix/./posix/getopt.c
+  ./setjmp/../sysdeps/x86_64/setjmp.S
+  ./stdlib/../stdlib/strtol_l.c
+  ./stdlib/./stdlib/cxa_atexit.c
+  ./stdlib/./stdlib/cxa_finalize.c
+  ./stdlib/./stdlib/getenv.c
+  ./string/../string/strcspn.c
+  ./string/../sysdeps/x86_64/multiarch/../multiarch/memset-vec-unaligned-erms.S
+  ./string/../sysdeps/x86_64/multiarch/../multiarch/strchr-sse2.S
+  ./string/../sysdeps/x86_64/multiarch/../multiarch/strcmp-sse2.S
+  ./string/../sysdeps/x86_64/multiarch/../multiarch/strlen-sse2.S
+  ./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S
+  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S
+  ./string/../sysdeps/x86_64/multiarch/strlen-avx2.S
+  ./wcsmbs/./wcsmbs/btowc.c
+  ./wcsmbs/./wcsmbs/wctob.c
+  ./wcsmbs/./wcsmbsload.h
+  ./wctype/./wctype/wctype_l.c
+
