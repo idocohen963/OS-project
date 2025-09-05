@@ -33,10 +33,16 @@
 
 struct ParsedRequest
 {
-    int v{};         // vertices
-    int e{};         // edges
-    int s{};         // for seed
-    bool directed{}; // for directed or undirected graph
+    enum Kind
+    {
+        RANDOM,
+        MANUAL
+    } kind;
+    int v{};                                // vertices
+    int e{};                                // edges
+    int s{};                                // seed (FOR RANDOM)
+    bool d{};                               // for directed or undirected graph
+    std::vector<std::pair<int, int>> edges; // for MANUAL
 };
 
 static std::string trim(const std::string &s)
@@ -51,27 +57,92 @@ static std::string trim(const std::string &s)
 static std::optional<ParsedRequest> parse_request(const std::string &text, std::string &err)
 {
     std::istringstream in(text);
-    ParsedRequest r;
-    if (!(in >> r.v >> r.e >> r.s))
+    std::string tag;
+    if (!(in >> tag))
     {
-        err = "Usage: -v vertices -e edges -s seed [-d] \n";
+        err = "Empty request";
         return std::nullopt;
-    }
-    
-    int dirFlag;
-    if (in >> dirFlag)
-    {
-        r.directed = (dirFlag != 0);
     }
 
-    if (r.v <= 0 || r.e < 0)
+    if (tag == "RANDOM")
     {
-        err = " parameters not actual or positive numbers.";
+        ParsedRequest r;
+        r.kind = ParsedRequest::RANDOM;
+
+        if (!(in >> r.v >> r.e >> r.s))
+        {
+            err = "Usage: RANDOM <vertices> <edges> <seed> [directed] \n";
+            return std::nullopt;
+        }
+
+        int dirFlag;
+        if (in >> dirFlag)
+        {
+            r.d = (dirFlag != 0);
+        }
+
+        if (r.v <= 0 || r.e < 0)
+        {
+            err = " parameters not actual or positive numbers.";
+            return std::nullopt;
+        }
+        return r;
+        err = "Unknown request";
         return std::nullopt;
     }
-    return r;
-    err = "Unknown request";
+
+    else if (tag == "MANUAL")
+    {
+        ParsedRequest r;
+        r.kind = ParsedRequest::MANUAL;
+        if (!(in >> r.v >> r.e))
+        {
+            err = "Usage: MANUAL <vertices> <edges> [directed]\n"
+                  "<edge_1_src> <edge_1_dest> [weight_1]  ... <edge_N_src> <edge_N_dest> [weight_N]\n";
+            return std::nullopt;
+        }
+        
+        int dirFlag;
+        if (in >> dirFlag)
+        {
+            r.d = (dirFlag != 0);
+        }   
+
+        if (r.v <= 0 || r.e < 0)
+        {
+            err = "Invalid vertices or edges\n";
+            return std::nullopt;
+        }
+
+        r.edges.reserve((size_t)r.e);
+        for (int i = 0; i < r.e; ++i)
+        {
+            int src, dest;
+            if (!(in >> src >> dest))
+            {
+                err = "Not enough edges provided\n";
+                return std::nullopt;
+            }
+            if (src < 0 || src >= r.v || dest < 0 || dest >= r.v)
+            {
+                err = "Edge vertices out of range\n";
+                return std::nullopt;
+            }
+            r.edges.emplace_back(src, dest);
+        }
+        return r;
+    }
+    // else
+    err = "Unknown request type\n";
     return std::nullopt;
+}
+
+static Graph::Graph build_graph_from_edges(int n, const std::vector<std::pair<int, int>> &edges, bool directed = false)
+{
+    Graph::Graph g(n, directed);
+    for (auto [u, v] : edges)
+        g.addEdge(u, v);
+    return g;
 }
 
 static Graph::Graph build_random_graph(int vertices, int edges, int seed, bool directed)
@@ -169,7 +240,9 @@ static void handle_client(int cfd)
     try
     {
         // Build the graph
-        Graph::Graph g = build_random_graph(parsed->v, parsed->e, parsed->s, parsed->directed);
+        Graph::Graph g = (parsed->kind == ParsedRequest::RANDOM)
+                       ? build_random_graph(parsed->v, parsed->e, parsed->s, parsed->d)
+                       : build_graph_from_edges(parsed->v, parsed->edges, parsed->d);
 
         std::ostringstream out;
         out << g.getGraph();

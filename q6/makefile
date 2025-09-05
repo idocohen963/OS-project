@@ -20,7 +20,7 @@ client: $(CLIENT_OBJS)
 
 clean:
 	rm -f server client $(SERVER_OBJS) $(CLIENT_OBJS) \
-	      $(SERVER_OBJS:.o=.d) $(CLIENT_OBJS:.o=.d)
+	      *.d *.o
 
 -include $(SERVER_OBJS:.o=.d) $(CLIENT_OBJS:.o=.d)
 

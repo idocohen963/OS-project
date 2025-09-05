@@ -37,40 +37,164 @@ static std::string recv_all_cli(int fd)
     return out;
 }
 
+static void print_usage(const char *prog)
+{
+    std::cerr
+        << "Usage:\n"
+        << "  " << prog << " --random -v <vertices> -e <edges> -s <seed> [-d]\n"
+        << "  " << prog << " --manual -v <vertices> -e <edges> [-d]   <  edges on stdin\n\n"
+        << "Flags:\n"
+        << "  --random           Generate a random graph on server side\n"
+        << "  --manual           Send a manual graph (read edges from stdin)\n"
+        << "  -v <num>           Number of vertices (required in both modes)\n"
+        << "  -e <num>           Number of edges (required in --random)\n"
+        << "  -s <num>           Seed for RNG (required in --random)\n"
+        << "  -d                 Directed graph (optional; default undirected)\n";
+}
+
 int main(int argc, char **argv)
 {
     std::string host = "127.0.0.1";
     int port = 8080;
+
+    enum Mode
+    {
+        NONE,
+        RANDOM,
+        MANUAL
+    } mode = NONE;
     int vertices = -1, edges = -1, seed = -1;
     bool directed = false;
-    int opt;
 
-    while ((opt = getopt(argc, argv, "v:e:s:d")) != -1) {
-        switch (opt) {
-            case 'v': vertices = std::stoi(optarg); break;
-            case 'e': edges = std::stoi(optarg); break;
-            case 's': seed = std::stoi(optarg); break;
-            case 'd': directed = true; break; 
-            default:
-                std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d]\n";
-                return 1;
+    // --- Pass 1: decide mode ---
+    opterr = 0; // don't auto-print errors
+    static option longopts[] = {
+        {"random", no_argument, nullptr, 1000},
+        {"manual", no_argument, nullptr, 1001},
+        {"vertices", required_argument, nullptr, 'v'},
+        {"edges", required_argument, nullptr, 'e'},
+        {"seed", required_argument, nullptr, 's'},
+        {"directed", no_argument, nullptr, 'd'},
+        {nullptr, 0, nullptr, 0}};
+
+    int c;
+    while ((c = getopt_long(argc, argv, ":v:e:s:d", longopts, nullptr)) != -1)
+    {
+        switch (c)
+        {
+        case 1000: // --random
+            if (mode == MANUAL)
+            {
+                std::cerr << "ERROR: both --random and --manual given\n";
+                return 2;
+            }
+            mode = RANDOM;
+            break;
+        case 1001: // --manual
+            if (mode == RANDOM)
+            {
+                std::cerr << "ERROR: both --random and --manual given\n";
+                return 2;
+            }
+            mode = MANUAL;
+            break;
+        case 'v':
+            vertices = std::stoi(optarg);
+            break;
+        case 'e':
+            edges = std::stoi(optarg);
+            break;
+        case 's':
+            seed = std::stoi(optarg);
+            break;
+        case 'd':
+            directed = true;
+            break;
+        case ':': // missing argument
+            std::cerr << "ERROR: option -" << char(optopt) << " requires an argument\n";
+            print_usage(argv[0]);
+            return 1;
+        default:
+            std::cerr << "ERROR: unknown option\n";
+            print_usage(argv[0]);
+            return 1;
         }
     }
 
-    // Check that all required parameters were provided 
-    if (vertices == -1 || edges == -1 ||  seed == -1) {
-        std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d]\n";
-        return 1;
-    }
-
-    // If values are invalid
-    if (vertices <= 0 || edges < 0) {
-        throw std::invalid_argument(" parameters not actual or positive numbers.");
+    if (mode == NONE)
+    {
+        std::cerr << "ERROR: must pass one of --random or --manual\n";
+        print_usage(argv[0]);
+        return 2;
     }
 
     std::ostringstream req;
-    req << vertices << ' ' << edges << ' ' << seed << ' ' << directed << "\n";
 
+    if (mode == RANDOM)
+    {
+
+        // Check that all required parameters were provided
+        if (vertices == -1 || edges == -1 || seed == -1)
+        {
+            std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d]\n";
+            print_usage(argv[0]);
+            return 1;
+        }
+
+        // If values are invalid
+        if (vertices <= 0 || edges < 0)
+        {
+            std::cerr << "ERROR: vertices must be >0 and edges >=0.\n";
+        }
+
+        // Protocol for random mode (server expects: "v e s directed\n")
+        req << "RANDOM" << ' ' << vertices << ' ' << edges << ' ' << seed << ' ' << directed << "\n";
+    }
+
+    else // (mode == MANUAL)
+    {
+        // Check that all required parameters were provided
+        if (vertices == -1 || edges == -1)
+        {
+            std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s [-d]\n";
+            print_usage(argv[0]);
+            return 1;
+        }
+
+        if (vertices <= 0)
+        {
+            std::cerr << "ERROR: vertices must be >0.\n";
+            return 1;
+        }
+
+        if (edges < 0)
+        {
+            std::cerr << "ERROR: edges must be >=0\n";
+            return 1;
+        }
+
+        // Build MANUAL request header
+        req << "MANUAL" << ' ' << vertices << ' ' << edges << ' ' << directed << "\n";
+
+        // Read edges from stdin until EOF, pass through as-is.
+        // Expected per line: "u v [w]"
+        std::string line;
+
+        int count = 0;
+
+        while (count < edges && std::getline(std::cin, line))
+        {
+            // ignore pure empty lines in the middle to avoid accidental termination
+            if (line.empty())
+                continue;
+            req << line << "\n";
+            ++count;
+        }
+        // Terminate with a blank line as protocol delimiter
+        req << "\n";
+    }
+
+    // --- Networking ---
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
     {
