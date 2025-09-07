@@ -62,6 +62,9 @@ void SCC::dfsRev(const Graph::Graph& g, int v, std::vector<bool>& visited, std::
  * 4. Each DFS tree in step 3 is a strongly connected component
  */
 std::string SCC::run(const Graph::Graph& graph) {
+    if (!graph.isDirected()) {
+        return "SCC algorithm is only applicable to directed graphs.";
+    }
     int n = graph.getNumVertices();
     std::vector<bool> visited(n, false);
     std::vector<int> order;

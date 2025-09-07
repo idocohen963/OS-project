@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2  -MMD -MP
 
-SERVER_SRCS = Graph.cpp server.cpp
+SERVER_SRCS = Graph.cpp server.cpp SCC.cpp MST.cpp MaxFlow.cpp CliqueCount.cpp
 CLIENT_SRCS = client.cpp
 
 SERVER_OBJS = $(SERVER_SRCS:.cpp=.o)

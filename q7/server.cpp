@@ -26,6 +26,7 @@
 #include <algorithm>
 
 #include "Graph.hpp"
+#include "AlgorithmFactory.hpp"
 
 // ==========================
 // Request Parsing
@@ -35,8 +36,11 @@ struct ParsedRequest
 {
     enum Algorithm
     {
-        ALG_EULER = 1,
-        ALG_SCC = 2
+        ALG_MST = 1,
+        ALG_SCC = 2,
+        ALG_MaxFlow = 3,
+        ALG_CliqueCount = 4
+
     } alg;
 
     enum Kind
@@ -70,9 +74,9 @@ static bool read_required_alg(std::istringstream &in, int &alg_out, std::string 
         err = "Missing algorithm id after ALG";
         return false;
     }
-    if (alg_out != 1 && alg_out != 2)
+    if (alg_out < 1 || alg_out > 4)
     {
-        err = "Invalid algorithm id (valid: 1=EULER, 2=SCC)";
+        err = "Invalid algorithm id (valid:ALG_MST = 1,ALG_SCC = 2, ALG_MaxFlow = 3, ALG_CliqueCount = 4)";
         return false;
     }
     return true;
@@ -264,7 +268,7 @@ static bool send_all(int fd, const std::string &s)
 // algorithm handling
 //===========================
 
-std::string run_euler(Graph::Graph g)
+/*std::string run_euler(Graph::Graph g)
 {
     auto circuit = g.findEulerianCircuit();
     std::ostringstream out;
@@ -295,6 +299,7 @@ std::string run_scc(Graph::Graph g)
     out << "SCC algorithm: not implemented yet.\n";
     return out.str();
 }
+*/
 
 // ==========================
 // Handle a client connection
@@ -328,19 +333,22 @@ static void handle_client(int cfd)
         out << g.getGraph();
         send_all(cfd, out.str());
 
+        // Check if algorithm requires directed graph
+        if ((parsed->alg == ParsedRequest::ALG_SCC || parsed->alg == ParsedRequest::ALG_MaxFlow) && !g.isDirected())
+        {
+            std::string err = "Error: This algorithm requires a directed graph.\n";
+            send_all(cfd, err);
+            return;
+        }
+
         // Run the requested algorithm
         std::string result;
-        switch (parsed->alg)
-        {
-        case ParsedRequest::ALG_EULER:
-            result = run_euler(g);
-            break;
-        case ParsedRequest::ALG_SCC:
-            result = run_scc(g);
-            break;
-        default:
+        Algorithm* alg = AlgorithmFactory::create(parsed->alg);
+        if (alg) {
+            result = alg->run(g);
+            delete alg;
+        } else {
             result = "ERROR: invalid algorithm id\n";
-            break;
         }
         send_all(cfd, result);
     }

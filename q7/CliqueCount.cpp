@@ -39,13 +39,24 @@ std::string CliqueCount::run(const Graph::Graph& graph) {
         // Check if every pair of vertices in the subset has an edge
         for (size_t i = 0; i < nodes.size(); ++i) {
             for (size_t j = i + 1; j < nodes.size(); ++j) {
-                // Check if there's an edge between nodes[i] and nodes[j]
-                if (!graph.hasEdge(nodes[i], nodes[j])) {
-                    isClique = false;  // Missing edge means not a clique
-                    break;             // No need to check further pairs
+                bool hasForwardEdge = graph.hasEdge(nodes[i], nodes[j]);
+                bool hasReverseEdge = graph.hasEdge(nodes[j], nodes[i]);
+                
+                // For undirected graphs: need edge in at least one direction (stored in both)
+                // For directed graphs: need edges in both directions for a complete subgraph
+                if (graph.isDirected()) {
+                    if (!hasForwardEdge || !hasReverseEdge) {
+                        isClique = false;
+                        break;
+                    }
+                } else {
+                    if (!hasForwardEdge) {
+                        isClique = false;
+                        break;
+                    }
                 }
             }
-            if (!isClique) break;  // Early termination if not a clique
+            if (!isClique) break;
         }
         
         // If all pairs are connected, we found a clique
@@ -54,5 +65,5 @@ std::string CliqueCount::run(const Graph::Graph& graph) {
         }
     }
     
-    return "Number of cliques (size 2-10): " + std::to_string(count);
+    return "Number of cliques (size 2-6): " + std::to_string(count);
 }

@@ -26,10 +26,11 @@ public:
      * The algorithm:
      * 1. Enumerates all possible subsets of vertices using bit manipulation
      * 2. For each subset of size 2-5, checks if it forms a clique
-     * 3. A subset is a clique if every pair of vertices has an edge between them
-     * 4. Returns the total count of valid cliques
+     * 3. For undirected graphs: a subset is a clique if every pair has an edge
+     * 4. For directed graphs: a subset is a clique if every pair has edges in both directions
+     * 5. Returns the total count of valid cliques
      * 
-     * @note For directed graphs, checks for edges in the direction they exist
+     * @note For directed graphs, requires bidirectional edges for clique membership
      * @note The size range (2-6) is hardcoded but can be easily modified
      */
     std::string run(const Graph::Graph& graph) override;

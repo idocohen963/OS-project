@@ -20,8 +20,10 @@ struct AlgItem
 };
 
 static const AlgItem kAlgorithms[] = {
-    {1, "EULER (Eulerian circuit)"},
+    {1, "MST (Minimum Spanning Tree)"},
     {2, "SCC (Strongly Connected Components)"},
+    {3, "MaxFlow (Maximum Flow)"},
+    {4, "CliqueCount (Clique Counting)"},
     // add more algorithms ...
 };
 
