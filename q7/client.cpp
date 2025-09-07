@@ -11,6 +11,52 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <limits>
+
+struct AlgItem
+{
+    int id;
+    const char *name;
+};
+
+static const AlgItem kAlgorithms[] = {
+    {1, "EULER (Eulerian circuit)"},
+    {2, "SCC (Strongly Connected Components)"},
+    // add more algorithms ...
+};
+
+static int ask_user_for_algorithm()
+{
+    while (true)
+    {
+        std::cout << "choose algorithm\n";
+        for (const auto &a : kAlgorithms)
+            std::cout << "  (" << a.id << ") " << a.name << "\n";
+        std::cout << "> " << std::flush;
+
+        std::string line;
+        if (!std::getline(std::cin, line))
+        {
+            // EOF
+            std::cerr << "\nTerminated (no input)\n";
+            std::exit(1);
+        }
+        try
+        {
+            int choice = std::stoi(line);
+            for (const auto &a : kAlgorithms)
+            {
+                if (a.id == choice)
+                    return choice;
+            }
+            std::cerr << "invalid choice, try again.\n";
+        }
+        catch (...)
+        {
+            std::cerr << "invalid input, try again.\n";
+        }
+    }
+}
 
 static bool send_all_cli(int fd, const std::string &s)
 {
@@ -147,8 +193,10 @@ int main(int argc, char **argv)
             std::cerr << "ERROR: vertices must be >0 and edges >=0.\n";
         }
 
+        int alg = ask_user_for_algorithm();
+
         // Protocol for random mode (server expects: "v e s directed\n")
-        req << "RANDOM" << ' ' << vertices << ' ' << edges << ' ' << seed << ' ' << directed << "\n";
+        req << "RANDOM" << ' ' << vertices << ' ' << edges << ' ' << seed << ' ' << directed << " ALG " << alg << "\n";
     }
 
     else // (mode == MANUAL)
@@ -173,13 +221,10 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        // Build MANUAL request header
-        req << "MANUAL" << ' ' << vertices << ' ' << edges << ' ' << directed << "\n";
-
         // Read edges from stdin until EOF, pass through as-is.
         // Expected per line: "u v [w]"
+        std::string edges_buf;
         std::string line;
-
         int count = 0;
 
         while (count < edges && std::getline(std::cin, line))
@@ -187,10 +232,17 @@ int main(int argc, char **argv)
             // ignore pure empty lines in the middle to avoid accidental termination
             if (line.empty())
                 continue;
-            req << line << "\n";
+            edges_buf.append(line);
+            edges_buf.push_back('\n');
             ++count;
         }
-        // Terminate with a blank line as protocol delimiter
+
+        // get algorithm choice from user
+        int alg = ask_user_for_algorithm();
+
+        // Build MANUAL request header
+        req << "MANUAL" << ' ' << vertices << ' ' << edges << ' ' << directed << " ALG " << alg << "\n";
+        req << edges_buf;
         req << "\n";
     }
 

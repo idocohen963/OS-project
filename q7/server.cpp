@@ -1,5 +1,5 @@
 // ==========================
-// File: server.cpp
+// File: euler_server.cpp
 // TCP server that receives a graph (or parameters for a random graph),
 // runs the Euler cycle algorithm, and returns the result to the client.
 // ==========================
@@ -33,17 +33,50 @@
 
 struct ParsedRequest
 {
+    enum Algorithm
+    {
+        ALG_EULER = 1,
+        ALG_SCC = 2
+    } alg;
+
     enum Kind
     {
         RANDOM,
         MANUAL
     } kind;
+
     int v{};                                // vertices
     int e{};                                // edges
     int s{};                                // seed (FOR RANDOM)
     bool d{};                               // for directed or undirected graph
     std::vector<std::pair<int, int>> edges; // for MANUAL
 };
+
+static bool read_required_alg(std::istringstream &in, int &alg_out, std::string &err)
+{
+    std::string key;
+    if (!(in >> key))
+    {
+        err = "Missing ALG token";
+        return false;
+    }
+    if (key != "ALG")
+    {
+        err = "Expected 'ALG' token";
+        return false;
+    }
+    if (!(in >> alg_out))
+    {
+        err = "Missing algorithm id after ALG";
+        return false;
+    }
+    if (alg_out != 1 && alg_out != 2)
+    {
+        err = "Invalid algorithm id (valid: 1=EULER, 2=SCC)";
+        return false;
+    }
+    return true;
+}
 
 static std::string trim(const std::string &s)
 {
@@ -71,7 +104,7 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
 
         if (!(in >> r.v >> r.e >> r.s))
         {
-            err = "Usage: RANDOM <vertices> <edges> <seed> [directed] \n";
+            err = "Usage: RANDOM <vertices> <edges> <seed> [directed] ALG <id> \n";
             return std::nullopt;
         }
 
@@ -80,6 +113,11 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
         {
             r.d = (dirFlag != 0);
         }
+
+        int alg_id = 0;
+        if (!read_required_alg(in, alg_id, err))
+            return std::nullopt;
+        r.alg = static_cast<ParsedRequest::Algorithm>(alg_id);
 
         if (r.v <= 0 || r.e < 0)
         {
@@ -101,12 +139,17 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
                   "<edge_1_src> <edge_1_dest> [weight_1]  ... <edge_N_src> <edge_N_dest> [weight_N]\n";
             return std::nullopt;
         }
-        
+
         int dirFlag;
         if (in >> dirFlag)
         {
             r.d = (dirFlag != 0);
-        }   
+        }
+
+        int alg_id = 0;
+        if (!read_required_alg(in, alg_id, err))
+            return std::nullopt;
+        r.alg = static_cast<ParsedRequest::Algorithm>(alg_id);
 
         if (r.v <= 0 || r.e < 0)
         {
@@ -217,6 +260,42 @@ static bool send_all(int fd, const std::string &s)
     return true;
 }
 
+//===========================
+// algorithm handling
+//===========================
+
+std::string run_euler(Graph::Graph g)
+{
+    auto circuit = g.findEulerianCircuit();
+    std::ostringstream out;
+
+    if (!circuit.empty())
+    {
+        out << "Eulerian Circuit: ";
+        for (size_t i = 0; i < circuit.size(); ++i)
+        {
+            out << circuit[i];
+            if (i + 1 < circuit.size())
+                out << " -> ";
+        }
+        out << "\n";
+    }
+    else
+    {
+        out << "No Eulerian circuit exists in this graph.\n";
+    }
+
+    return out.str();
+}
+
+std::string run_scc(Graph::Graph g)
+{
+    // Placeholder for SCC algorithm implementation
+    std::ostringstream out;
+    out << "SCC algorithm: not implemented yet.\n";
+    return out.str();
+}
+
 // ==========================
 // Handle a client connection
 // ==========================
@@ -241,33 +320,31 @@ static void handle_client(int cfd)
     {
         // Build the graph
         Graph::Graph g = (parsed->kind == ParsedRequest::RANDOM)
-                       ? build_random_graph(parsed->v, parsed->e, parsed->s, parsed->d)
-                       : build_graph_from_edges(parsed->v, parsed->edges, parsed->d);
+                             ? build_random_graph(parsed->v, parsed->e, parsed->s, parsed->d)
+                             : build_graph_from_edges(parsed->v, parsed->edges, parsed->d);
 
+        // Send back the graph representation
         std::ostringstream out;
         out << g.getGraph();
         send_all(cfd, out.str());
 
-        // Find and send Eulerian circuit if exists
-        auto circuit = g.findEulerianCircuit();
-        if (!circuit.empty())
+        // Run the requested algorithm
+        std::string result;
+        switch (parsed->alg)
         {
-            std::ostringstream out;
-            out << "Eulerian Circuit: ";
-            for (size_t i = 0; i < circuit.size(); ++i)
-            {
-                out << circuit[i];
-                if (i + 1 < circuit.size())
-                    out << " -> ";
-            }
-            out << "\n";
-            send_all(cfd, out.str());
+        case ParsedRequest::ALG_EULER:
+            result = run_euler(g);
+            break;
+        case ParsedRequest::ALG_SCC:
+            result = run_scc(g);
+            break;
+        default:
+            result = "ERROR: invalid algorithm id\n";
+            break;
         }
-        else
-        {
-            send_all(cfd, "No Eulerian circuit exists in this graph.\n");
-        }
+        send_all(cfd, result);
     }
+
     catch (const std::exception &ex)
     {
         send_all(cfd, std::string("ERROR: ") + ex.what() + "\n");
