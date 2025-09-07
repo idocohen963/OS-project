@@ -264,43 +264,6 @@ static bool send_all(int fd, const std::string &s)
     return true;
 }
 
-//===========================
-// algorithm handling
-//===========================
-
-/*std::string run_euler(Graph::Graph g)
-{
-    auto circuit = g.findEulerianCircuit();
-    std::ostringstream out;
-
-    if (!circuit.empty())
-    {
-        out << "Eulerian Circuit: ";
-        for (size_t i = 0; i < circuit.size(); ++i)
-        {
-            out << circuit[i];
-            if (i + 1 < circuit.size())
-                out << " -> ";
-        }
-        out << "\n";
-    }
-    else
-    {
-        out << "No Eulerian circuit exists in this graph.\n";
-    }
-
-    return out.str();
-}
-
-std::string run_scc(Graph::Graph g)
-{
-    // Placeholder for SCC algorithm implementation
-    std::ostringstream out;
-    out << "SCC algorithm: not implemented yet.\n";
-    return out.str();
-}
-*/
-
 // ==========================
 // Handle a client connection
 // ==========================
