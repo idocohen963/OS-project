@@ -279,6 +279,6 @@ int main(int argc, char **argv)
     std::string resp = recv_all_cli(fd);
     ::close(fd);
 
-    std::cout << resp;
+    std::cout << resp << std::endl ;
     return 0;
 }

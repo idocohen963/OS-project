@@ -26,7 +26,7 @@
 #include <algorithm>
 
 #include "Graph.hpp"
-#include "AlgorithmFactory.hpp"
+#include "algorithms/AlgorithmFactory.hpp"
 
 // ==========================
 // Request Parsing

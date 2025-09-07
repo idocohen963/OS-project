@@ -1,7 +1,7 @@
 #ifndef ALGORITHM_HPP
 #define ALGORITHM_HPP
 
-#include "Graph.hpp"
+#include "../Graph.hpp"
 #include <string>
 
 /**
