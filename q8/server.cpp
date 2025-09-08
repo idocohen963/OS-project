@@ -1,8 +1,12 @@
-// ==========================
-// File: server.cpp 
-// Multithreaded TCP server using Leader/Followers pattern
-// Receives a graph (or parameters for a random graph) and runs all 4 algorithms
-// ==========================
+/**
+ * @file server.cpp
+ * @brief Multithreaded TCP server (Leader/Followers) for running graph algorithms.
+ *
+ * The server accepts two request types (RANDOM and MANUAL). For RANDOM the client
+ * provides (vertices, edges, seed, directed_flag). For MANUAL the client supplies
+ * an explicit list of edges. The server builds the graph, runs all available
+ * algorithms (via AlgorithmFactory) and returns a textual report.
+ */
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -36,6 +40,18 @@
 // Request Parsing
 // ==========================
 
+/**
+ * @struct ParsedRequest
+ * @brief In-memory representation of a parsed client request.
+ *
+ * Fields:
+ * - kind: request type (RANDOM or MANUAL)
+ * - v: number of vertices
+ * - e: number of edges
+ * - s: RNG seed (only valid for RANDOM)
+ * - d: directed flag
+ * - edges: list of (src,dest) pairs when kind==MANUAL
+ */
 struct ParsedRequest
 {
     enum Kind
@@ -44,13 +60,19 @@ struct ParsedRequest
         MANUAL
     } kind;
 
-    int v{};                                // vertices
-    int e{};                                // edges
-    int s{};                                // seed (FOR RANDOM)
-    bool d{};                               // for directed or undirected graph
-    std::vector<std::pair<int, int>> edges; // for MANUAL
+    int v{};                                ///< vertices
+    int e{};                                ///< edges
+    int s{};                                ///< seed (FOR RANDOM)
+    bool d{};                               ///< for directed or undirected graph
+    std::vector<std::pair<int, int>> edges; ///< for MANUAL
 };
 
+/**
+ * @brief Trim leading and trailing whitespace from a string.
+ *
+ * @param s Input string.
+ * @return Trimmed string.
+ */
 static std::string trim(const std::string &s)
 {
     size_t a = s.find_first_not_of(" \r\n\t");
@@ -60,6 +82,19 @@ static std::string trim(const std::string &s)
     return s.substr(a, b - a + 1);
 }
 
+/**
+ * @brief Parse a textual request received from the client.
+ *
+ * The supported formats are:
+ * - RANDOM <vertices> <edges> <seed> [directed]
+ * - MANUAL <vertices> <edges> [directed]\n<edge lines...>
+ *
+ * On success returns a ParsedRequest; on failure returns std::nullopt and sets `err`.
+ *
+ * @param text Raw input text from the client (trimmed prior to call is acceptable).
+ * @param err Output parameter populated with an error message on failure.
+ * @return std::optional<ParsedRequest>
+ */
 static std::optional<ParsedRequest> parse_request(const std::string &text, std::string &err)
 {
     std::istringstream in(text);
@@ -87,11 +122,6 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
             r.d = (dirFlag != 0);
         }
 
-        // לא צריך יותר לקרוא אלגוריתם - נריץ את כולם
-        // int alg_id = 0;
-        // if (!read_required_alg(in, alg_id, err))
-        //     return std::nullopt;
-
         if (r.v <= 0 || r.e < 0)
         {
             err = " parameters not actual or positive numbers.";
@@ -116,11 +146,6 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
         {
             r.d = (dirFlag != 0);
         }
-
-        // לא צריך יותר לקרוא אלגוריתם - נריץ את כולם
-        // int alg_id = 0;
-        // if (!read_required_alg(in, alg_id, err))
-        //     return std::nullopt;
 
         if (r.v <= 0 || r.e < 0)
         {
@@ -151,6 +176,14 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
     return std::nullopt;
 }
 
+/**
+ * @brief Construct a Graph object from an explicit list of edges.
+ *
+ * @param n Number of vertices.
+ * @param edges Vector of (src,dest) pairs.
+ * @param directed Whether the graph is directed.
+ * @return Graph::Graph instance owning the constructed adjacency lists.
+ */
 static Graph::Graph build_graph_from_edges(int n, const std::vector<std::pair<int, int>> &edges, bool directed = false)
 {
     Graph::Graph g(n, directed);
@@ -159,6 +192,18 @@ static Graph::Graph build_graph_from_edges(int n, const std::vector<std::pair<in
     return g;
 }
 
+/**
+ * @brief Build a random graph with the specified parameters.
+ *
+ * Uses std::mt19937 seeded with `seed` and uniformly selects vertex pairs.
+ * Throws std::invalid_argument on invalid parameters.
+ *
+ * @param vertices Number of vertices.
+ * @param edges Number of edges to add (duplicates/self-loops avoided).
+ * @param seed RNG seed.
+ * @param directed Whether the graph is directed.
+ * @return Graph::Graph constructed graph.
+ */
 static Graph::Graph build_random_graph(int vertices, int edges, int seed, bool directed)
 {
     if (vertices <= 0 || edges < 0)
@@ -200,6 +245,16 @@ static Graph::Graph build_random_graph(int vertices, int edges, int seed, bool d
 // Networking helpers
 // ==========================
 
+/**
+ * @brief Receive data from fd until the client shuts down the write side or a terminator is seen.
+ *
+ * The function appends received bytes to `out` and stops when it detects a double newline
+ * terminator ("\n\n" or "\r\n\r\n") or when recv returns 0. On socket error returns -1.
+ *
+ * @param fd Socket file descriptor.
+ * @param out Output string to append received bytes to.
+ * @return total number of bytes received, or -1 on error.
+ */
 static ssize_t recv_all(int fd, std::string &out)
 {
     char buf[4096];
@@ -215,6 +270,15 @@ static ssize_t recv_all(int fd, std::string &out)
     return (n < 0 && errno != 0) ? -1 : total;
 }
 
+/**
+ * @brief Send the full contents of a string over a blocking socket.
+ *
+ * Retries until all bytes are sent or an error occurs.
+ *
+ * @param fd Socket file descriptor.
+ * @param s Data to send.
+ * @return true on success, false on error.
+ */
 static bool send_all(int fd, const std::string &s)
 {
     size_t sent = 0;
@@ -232,28 +296,42 @@ static bool send_all(int fd, const std::string &s)
 }
 
 // ==========================
-// Handle a client connection - עודכן לרוץ כל 4 האלגוריתמים
+// Handle a client connection - runs all 4 algorithms
 // ==========================
 
+/**
+ * @brief Handle a single client connection.
+ *
+ * This function receives a request, parses it, constructs the graph (random or manual),
+ * runs all algorithms via AlgorithmFactory and sends back a textual report. Errors are
+ * reported back to the client as a short message starting with "ERROR:".
+ *
+ * @param cfd Connected client socket file descriptor. The caller retains responsibility
+ *            for closing the descriptor after this function returns.
+ */
 static void handle_client(int cfd)
 {
     std::string req_raw;
+    // Receive the full request from the client. recv_all will return -1 on socket error.
+    // The protocol uses a blank-line terminator ("\n\n" or CRLF pair) or EOF to finish the request.
     if (recv_all(cfd, req_raw) < 0)
     {
         send_all(cfd, "ERROR: recv failed\n");
         return;
     }
     std::string err;
+    // Trim and parse the request. parse_request validates parameter counts and ranges.
     auto parsed = parse_request(trim(req_raw), err);
     if (!parsed)
     {
+        // Send a short error back to the client and return.
         send_all(cfd, std::string("ERROR: ") + err + "\n");
         return;
     }
 
     try
     {
-        // Build the graph
+    // Build the graph (either random or from explicit edges)
         Graph::Graph g = (parsed->kind == ParsedRequest::RANDOM)
                              ? build_random_graph(parsed->v, parsed->e, parsed->s, parsed->d)
                              : build_graph_from_edges(parsed->v, parsed->edges, parsed->d);
@@ -262,20 +340,26 @@ static void handle_client(int cfd)
         std::ostringstream out;
         out << "Graph:\n" << g.getGraph() << "\nResults:\n";
 
-        // הרצת כל 4 האלגוריתמים בלולאה פשוטה
+        // Run each algorithm and append its textual result.
         for (int alg_id = 1; alg_id <= 4; ++alg_id) {
             try {
-                // בדיקה אם האלגוריתם דורש גרף מכוון
+                // Algorithms 2 and 3 require a directed graph; if the input is undirected,
+                // report that requirement instead of running them.
                 if ((alg_id == 2 || alg_id == 3) && !g.isDirected()) {
                     out << "Algorithm " << alg_id << ": Requires directed graph\n";
                     continue;
                 }
+
+                // Create, run and free the algorithm instance. The run(...) call is
+                // expected to return a string describing the result; any thrown exceptions
+                // are caught below to avoid crashing the connection handler.
                 Algorithm* alg = AlgorithmFactory::create(alg_id);
                 if (alg) {
-                    out << "Algorithm " << alg_id << ": " << alg->run(g) << "\n";
+                    out  << alg->run(g) << "\n";
                     delete alg;
                 }
             } catch (const std::exception &ex) {
+                // Convert algorithm failure into a textual message sent back to the client.
                 out << "Algorithm " << alg_id << " Error: " << ex.what() << "\n";
             }
         }
@@ -288,16 +372,24 @@ static void handle_client(int cfd)
     }
 }
 
-// ==========================
-// Thread Pool globals - פשוט ויעיל לניהול threads
-// ==========================
+/**
+ * Thread pool globals
+ * A single queue guarded by a mutex/condition variable implements a simple
+ * leader/follower style worker pool. New connections are pushed by the accept loop
+ * and processed by `worker_thread` instances.
+ */
 
-std::queue<int> client_queue;              // תור של client connections
-std::mutex queue_mutex;                    // מנעול לתור
-std::condition_variable queue_condition;   // סינכרון threads
-std::atomic<bool> server_stop(false);     // דגל עצירה
+std::queue<int> client_queue;              // queue of client connections
+std::mutex queue_mutex;                    // mutex protecting the queue
+std::condition_variable queue_condition;   // worker wakeup condition variable
+std::atomic<bool> server_stop(false);     // flag to request worker shutdown
 
-// Worker thread function - פונקציה שרצה בכל thread
+/**
+ * @brief Worker thread main loop.
+ *
+ * Each worker waits for a client fd to appear in `client_queue`, then calls
+ * `handle_client` and closes the client fd. The loop exits when `server_stop` is set.
+ */
 void worker_thread() {
     while (!server_stop) {
         int client_fd = -1;
@@ -329,8 +421,9 @@ static int sfd = -1;
 static void on_sigint(int)
 {
     g_stop = 1;
-    server_stop = true;  // עדכון גם ל-thread pool
-    queue_condition.notify_all(); // מעורר את כל ה-threads לסיום
+    // Request workers to stop and wake them in case they're waiting
+    server_stop = true;
+    queue_condition.notify_all(); // wake all worker threads so they can exit
     if (sfd != -1)
     {
         ::close(sfd);
@@ -338,13 +431,24 @@ static void on_sigint(int)
     }
 }
 
+/**
+ * @brief Server entry point.
+ *
+ * Command-line options:
+ * -p <port>    Listening port (default 8080)
+ * -t <threads> Number of worker threads (default 4)
+ *
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ * @return exit status.
+ */
 int main(int argc, char **argv)
 {
     int port = 8080;
-    int num_threads = 4; // מספר ברירת מחדל של threads
+    int num_threads = 10; // default number of worker threads
     int opt;
-    
-    // הוספת אפשרות לקבלת מספר threads מהמשתמש
+
+    // Allow overriding the number of worker threads via a command-line option
     while ((opt = ::getopt(argc, argv, "p:t:")) != -1)
     {
         switch (opt)
@@ -392,7 +496,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // יצירת worker threads - Leader/Followers pattern
+    // create worker threads - Leader/Followers pattern
     std::vector<std::thread> workers;
     for (int i = 0; i < num_threads; ++i) {
         workers.emplace_back(worker_thread);
@@ -401,7 +505,7 @@ int main(int argc, char **argv)
     std::cout << "[MultiThreadServer] Listening on port " << port 
               << " with " << num_threads << " threads... (Ctrl+C to stop)\n" << std::flush;
     
-    // הלופ הראשי - מקבל connections ושם בתור
+    // Main accept loop: accept connections and enqueue them for worker threads
     while (!g_stop)
     {
         sockaddr_in caddr{};
@@ -415,15 +519,15 @@ int main(int argc, char **argv)
             continue;
         }
         
-        // הוספת connection לתור - Leader/Followers pattern
+    // Enqueue the accepted connection for processing by worker threads
         {
             std::lock_guard<std::mutex> lock(queue_mutex);
             client_queue.push(cfd);
         }
-        queue_condition.notify_one(); // מעורר thread אחד
+    queue_condition.notify_one(); // wake one worker to handle the new connection
     }
     
-    // סגירת השרת ו-threads
+    // shutdown the server and join worker threads
     server_stop = true;
     queue_condition.notify_all();
     for (auto& worker : workers) {

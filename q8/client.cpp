@@ -1,8 +1,14 @@
 
-// ==========================
-// File: client.cpp 
-// Client עבור השרת החדש - שולח רק גרף ומקבל תוצאות של כל האלגוריתמים
-// ==========================
+/**
+ * @file client.cpp
+ * @brief Client for the graph server. Sends either a random-parameters request or a
+ *        manual graph description and prints the server's response.
+ *
+ * The client supports two modes: --random and --manual. In --random mode the client
+ * sends the desired number of vertices/edges and an RNG seed. In --manual mode the
+ * client reads edges from stdin and forwards them to the server. The protocol is a simple
+ * text protocol (see usage text below).
+ */
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -17,6 +23,13 @@
 #include <string>
 #include <limits>
 
+/**
+ * @brief Send the entire buffer over a blocking socket, retrying on partial sends.
+ *
+ * @param fd Socket file descriptor to send on.
+ * @param s String buffer to send (bytes sent are s.size()).
+ * @return true if all bytes were sent, false on error.
+ */
 static bool send_all_cli(int fd, const std::string &s)
 {
     const char *p = s.data();
@@ -32,6 +45,15 @@ static bool send_all_cli(int fd, const std::string &s)
     return true;
 }
 
+/**
+ * @brief Receive all available data from a blocking socket until EOF.
+ *
+ * This function repeatedly calls recv(2) and appends data to a string until
+ * the peer performs an orderly shutdown (recv returns 0) or an error occurs.
+ *
+ * @param fd Socket file descriptor to receive from.
+ * @return std::string containing the received bytes (may be empty on error).
+ */
 static std::string recv_all_cli(int fd)
 {
     std::string out;
@@ -42,6 +64,11 @@ static std::string recv_all_cli(int fd)
     return out;
 }
 
+/**
+ * @brief Print usage information for the client.
+ *
+ * @param prog Program name (argv[0]) used in the usage message.
+ */
 static void print_usage(const char *prog)
 {
     std::cerr
@@ -58,6 +85,16 @@ static void print_usage(const char *prog)
         << "\nNote: Server will run all 4 algorithms on the provided graph\n";
 }
 
+/**
+ * @brief Program entry point for the client.
+ *
+ * Parses command-line arguments, constructs a textual protocol message and
+ * sends it to the server; then prints the server response to stdout.
+ *
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ * @return exit status: 0 on success, non-zero on error.
+ */
 int main(int argc, char **argv)
 {
     std::string host = "127.0.0.1";
@@ -154,8 +191,8 @@ int main(int argc, char **argv)
 
 
 
-        // Protocol for random mode - הסרת הדרישה לALG
-        req << "RANDOM" << ' ' << vertices << ' ' << edges << ' ' << seed << ' ' << directed << "\n";
+    // Protocol for random mode - send: RANDOM <vertices> <edges> <seed> <directed_flag>\n
+    req << "RANDOM" << ' ' << vertices << ' ' << edges << ' ' << seed << ' ' << directed << "\n";
     }
 
     else // (mode == MANUAL)
