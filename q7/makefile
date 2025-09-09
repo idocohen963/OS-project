@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2  -MMD -MP
 
-SERVER_SRCS = Graph.cpp server.cpp
+SERVER_SRCS = Graph.cpp server.cpp algorithms/SCC.cpp algorithms/MST.cpp algorithms/MaxFlow.cpp algorithms/CliqueCount.cpp
 CLIENT_SRCS = client.cpp
 
 SERVER_OBJS = $(SERVER_SRCS:.cpp=.o)
@@ -20,7 +20,7 @@ client: $(CLIENT_OBJS)
 
 clean:
 	rm -f server client $(SERVER_OBJS) $(CLIENT_OBJS) \
-	      *.d *.o
+	      *.d *.o algorithms/*.d algorithms/*.o
 
 -include $(SERVER_OBJS:.o=.d) $(CLIENT_OBJS:.o=.d)
 
