@@ -139,43 +139,24 @@ int Graph::getEdgeWeight(int src, int dest) const {
 }
 
 /**
- * @brief Prints the graph to stdout in adjacency-list format.
+ * @brief Returns the graph to in adjacency-list format.
  * For undirected graphs, both directions are present in the adjacency lists.
  * Format: v -> (neighbor1, w=weight1), (neighbor2, w=weight2), ...
- */
-void Graph::printGraph() const {
-   
-    for (int v = 0; v < numVertices; ++v) {
-        std::cout << v << " -> ";  // Print vertex number
-        const auto &neighbors = adj[v];  // Get adjacency list for this vertex
-        
-        // Print all neighbors with their weights
-        for (size_t i = 0; i < neighbors.size(); ++i) {
-            std::cout << "(" << neighbors[i].first << ", w=" << neighbors[i].second << ")";
-            if (i + 1 < neighbors.size()) std::cout << ", ";
-        }
-        std::cout << std::endl;  
-    }
-}
-
-/**
- * @brief Prints the graph to stdout in adjacency-list format.
- * For undirected graphs, both directions are present in the adjacency lists.
- * Format: v -> (neighbor1, w=weight1), (neighbor2, w=weight2), ...
+ * @return the graph in adjacency-list format
  */
 std::string Graph::getGraph() const {
    
     std::ostringstream out;
     for (int v = 0; v < numVertices; ++v) {
-        out << v << " -> ";  // Print vertex number
+        out << v << " -> ";  // Vertex number
         const auto &neighbors = adj[v];  // Get adjacency list for this vertex
         
-        // Print all neighbors with their weights
+        // All neighbors with their weights
         for (size_t i = 0; i < neighbors.size(); ++i) {
             out << "(" << neighbors[i].first << ", w=" << neighbors[i].second << ")";
             if (i + 1 < neighbors.size()) out << ", ";
         }
-        out << std::endl;  
+        out << std::endl;
     }
     return out.str();
 }
