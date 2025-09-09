@@ -456,13 +456,11 @@ static void on_sigint(int)
     // Request workers to stop and wake all waiting Followers
     server_stop = true;
     std::cout << "recive Ctrl+C from the user.\n";
-    /*
-    leader_condition.notify_all(); // wake all worker threads so they can exit
-    if (sfd != -1)
-    {
-        ::close(sfd);
-        sfd = -1;
-    }*/
+    
+    // Interrupt the accept() call by shutting down the socket
+    if (sfd != -1) {
+        ::shutdown(sfd, SHUT_RDWR);
+    }
 }
 
 /**
@@ -543,18 +541,28 @@ int main(int argc, char **argv)
     // Wait for shutdown signal - no accept loop in main with Leader/Follower pattern
     // The worker threads handle all accept() calls through the Leader/Follower mechanism
     while (!g_stop) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
+
     }
     
     // Shutdown the server and join worker threads
+    // Notify all waiting threads to exit
     server_stop = true;
     leader_condition.notify_all();
+
+    // Close the listening socket
+    if (sfd != -1) {
+        ::close(sfd);
+        sfd = -1;
+    }
+
+    // Join all worker threads
     for (auto& worker : workers) {
         if (worker.joinable()) {
             worker.join();
         }
     }
-    
-    ::close(sfd);
+
     std::cout << "[MultiThreadServer] Stopped.\n";
     return 0;
 }
