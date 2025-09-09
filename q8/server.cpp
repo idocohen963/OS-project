@@ -2,15 +2,15 @@
  * @file server.cpp
  * @brief Multithreaded TCP server implementing Leader/Follower pattern for running graph algorithms.
  *
- * The server accepts two request types (RANDOM and MANUAL). For RANDOM the client
- * provides (vertices, edges, seed, directed_flag). For MANUAL the client supplies
+ * The server accepts two request types (RANDOM and MANUAL). For RANDOM, the client
+ * provides (vertices, edges, seed, directed_flag). For MANUAL, the client supplies
  * an explicit list of edges. The server builds the graph, runs all available
- * algorithms (via AlgorithmFactory) and returns a textual report.
+ * algorithms (via AlgorithmFactory), and returns a textual report.
  *
- * Uses a strict Leader/Follower concurrency pattern where only one thread (the Leader)
+ * Implements a Leader/Follower concurrency pattern where only one thread (the Leader)
  * blocks on accept() at any given time, while all other threads (Followers) wait on
- * a condition variable. When the Leader accepts a connection, it immediately promotes
- * a Follower to become the new Leader and then handles the client as a Worker.
+ * a condition variable. When the Leader accepts a connection, it promotes a Follower
+ * to become the new Leader and then handles the client as a Worker.
  */
 
 #include <arpa/inet.h>
@@ -47,7 +47,7 @@
 
 /**
  * @struct ParsedRequest
- * @brief In-memory representation of a parsed client request.
+ * @brief Represents a parsed client request in memory.
  *
  * Fields:
  * - kind: request type (RANDOM or MANUAL)
@@ -75,6 +75,8 @@ struct ParsedRequest
 /**
  * @brief Trim leading and trailing whitespace from a string.
  *
+ * Removes spaces, tabs, and newline characters from both ends of the input string.
+ *
  * @param s Input string.
  * @return Trimmed string.
  */
@@ -90,13 +92,13 @@ static std::string trim(const std::string &s)
 /**
  * @brief Parse a textual request received from the client.
  *
- * The supported formats are:
+ * Supported formats:
  * - RANDOM <vertices> <edges> <seed> [directed]
  * - MANUAL <vertices> <edges> [directed]\n<edge lines...>
  *
- * On success returns a ParsedRequest; on failure returns std::nullopt and sets `err`.
+ * On success, returns a ParsedRequest. On failure, returns std::nullopt and sets `err`.
  *
- * @param text Raw input text from the client (trimmed prior to call is acceptable).
+ * @param text Raw input text from the client (can be pre-trimmed).
  * @param err Output parameter populated with an error message on failure.
  * @return std::optional<ParsedRequest>
  */
@@ -184,8 +186,11 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
 /**
  * @brief Construct a Graph object from an explicit list of edges.
  *
+ * Creates a graph using the provided vertices and edges, with an option to specify
+ * whether the graph is directed.
+ *
  * @param n Number of vertices.
- * @param edges Vector of (src,dest) pairs.
+ * @param edges Vector of (src, dest) pairs.
  * @param directed Whether the graph is directed.
  * @return Graph::Graph instance owning the constructed adjacency lists.
  */
@@ -251,14 +256,14 @@ static Graph::Graph build_random_graph(int vertices, int edges, int seed, bool d
 // ==========================
 
 /**
- * @brief Receive data from fd until the client shuts down the write side or a terminator is seen.
+ * @brief Receive data from a socket until the client shuts down the write side or a terminator is seen.
  *
- * The function appends received bytes to `out` and stops when it detects a double newline
- * terminator ("\n\n" or "\r\n\r\n") or when recv returns 0. On socket error returns -1.
+ * Appends received bytes to `out` and stops when a double newline terminator ("\n\n" or "\r\n\r\n")
+ * is detected or when recv returns 0. On socket error, returns -1.
  *
  * @param fd Socket file descriptor.
  * @param out Output string to append received bytes to.
- * @return total number of bytes received, or -1 on error.
+ * @return Total number of bytes received, or -1 on error.
  */
 static ssize_t recv_all(int fd, std::string &out)
 {
@@ -301,15 +306,15 @@ static bool send_all(int fd, const std::string &s)
 }
 
 // ==========================
-// Handle a client connection - runs all 4 algorithms
+// Handle a client connection - runs all algorithms
 // ==========================
 
 /**
  * @brief Handle a single client connection.
  *
- * This function receives a request, parses it, constructs the graph (random or manual),
- * runs all algorithms via AlgorithmFactory and sends back a textual report. Errors are
- * reported back to the client as a short message starting with "ERROR:".
+ * Receives a request, parses it, constructs the graph (random or manual),
+ * runs all algorithms via AlgorithmFactory, and sends back a textual report.
+ * Errors are reported back to the client as a short message starting with "ERROR:".
  *
  * @param cfd Connected client socket file descriptor. The caller retains responsibility
  *            for closing the descriptor after this function returns.
@@ -356,8 +361,7 @@ static void handle_client(int cfd)
                 }
 
                 // Create, run and free the algorithm instance. The run(...) call is
-                // expected to return a string describing the result; any thrown exceptions
-                // are caught below to avoid crashing the connection handler.
+                // expected to return a string describing the result
                 Algorithm* alg = AlgorithmFactory::create(alg_id);
                 if (alg) {
                     out  << alg->run(g) << "\n\n";
@@ -390,7 +394,7 @@ bool leader_token_available = true;       // flag indicating if leader token is 
 std::atomic<bool> server_stop(false);     // flag to request worker shutdown
 
 /**
- * @brief Worker thread main loop implementing Leader/Follower pattern.
+ * @brief Worker thread main loop implementing the Leader/Follower pattern.
  *
  * Each worker thread competes for the Leader role. Only the Leader thread
  * blocks on accept() while all other threads (Followers) wait on the condition
@@ -450,6 +454,13 @@ void worker_thread(int sfd) {
 
 static volatile sig_atomic_t g_stop = 0;
 static int sfd = -1;
+
+/**
+ * @brief Signal handler for SIGINT (Ctrl+C).
+ *
+ * Sets the global stop flag to initiate server shutdown (notifies all worker threads
+ * to stop), and interrupts any ongoing accept() calls by shutting down the listening socket.
+ */
 static void on_sigint(int)
 {
     g_stop = 1;
@@ -467,8 +478,10 @@ static void on_sigint(int)
  * @brief Server entry point.
  *
  * Command-line options:
- * -p <port>    Listening port (default 8080)
- * -t <threads> Number of worker threads (default 4)
+ * -t <threads> Number of worker threads (default 10).
+ *
+ * Initializes the server, creates worker threads, and listens for incoming
+ * connections. Implements graceful shutdown on SIGINT.
  *
  * @param argc Argument count.
  * @param argv Argument vector.
@@ -481,13 +494,10 @@ int main(int argc, char **argv)
     int opt;
 
     // Allow overriding the number of worker threads via a command-line option
-    while ((opt = ::getopt(argc, argv, "p:t:")) != -1)
+    while ((opt = ::getopt(argc, argv, "t:")) != -1)
     {
         switch (opt)
         {
-        case 'p':
-            port = std::atoi(optarg);
-            break;
         case 't':
             num_threads = std::atoi(optarg);
             if (num_threads <= 0) {
@@ -496,7 +506,7 @@ int main(int argc, char **argv)
             }
             break;
         default:
-            std::cerr << "Usage: " << argv[0] << " -p <port> -t <threads>\n";
+            std::cerr << "Usage: " << argv[0] << " -t <threads>\n";
             return 1;
         }
     }
