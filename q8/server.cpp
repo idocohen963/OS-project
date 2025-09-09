@@ -1,11 +1,16 @@
 /**
  * @file server.cpp
- * @brief Multithreaded TCP server (Leader/Followers) for running graph algorithms.
+ * @brief Multithreaded TCP server implementing Leader/Follower pattern for running graph algorithms.
  *
  * The server accepts two request types (RANDOM and MANUAL). For RANDOM the client
  * provides (vertices, edges, seed, directed_flag). For MANUAL the client supplies
  * an explicit list of edges. The server builds the graph, runs all available
  * algorithms (via AlgorithmFactory) and returns a textual report.
+ *
+ * Uses a strict Leader/Follower concurrency pattern where only one thread (the Leader)
+ * blocks on accept() at any given time, while all other threads (Followers) wait on
+ * a condition variable. When the Leader accepts a connection, it immediately promotes
+ * a Follower to become the new Leader and then handles the client as a Worker.
  */
 
 #include <arpa/inet.h>
@@ -346,7 +351,7 @@ static void handle_client(int cfd)
                 // Algorithms 2 and 3 require a directed graph; if the input is undirected,
                 // report that requirement instead of running them.
                 if ((alg_id == 2 || alg_id == 3) && !g.isDirected()) {
-                    out << "Algorithm " << alg_id << ": Requires directed graph\n";
+                    out << "Algorithm " << alg_id << ": Requires directed graph\n\n";
                     continue;
                 }
 
@@ -355,12 +360,12 @@ static void handle_client(int cfd)
                 // are caught below to avoid crashing the connection handler.
                 Algorithm* alg = AlgorithmFactory::create(alg_id);
                 if (alg) {
-                    out  << alg->run(g) << "\n";
+                    out  << alg->run(g) << "\n\n";
                     delete alg;
                 }
             } catch (const std::exception &ex) {
                 // Convert algorithm failure into a textual message sent back to the client.
-                out << "Algorithm " << alg_id << " Error: " << ex.what() << "\n";
+                out << "Algorithm " << alg_id << " Error: " << ex.what() << "\n\n";
             }
         }
 
@@ -373,41 +378,68 @@ static void handle_client(int cfd)
 }
 
 /**
- * Thread pool globals
- * A single queue guarded by a mutex/condition variable implements a simple
- * leader/follower style worker pool. New connections are pushed by the accept loop
- * and processed by `worker_thread` instances.
+ * Leader/Follower pattern globals
+ * A mutex, condition variable, and leader token flag implement the Leader/Follower
+ * synchronization mechanism. Only one thread (the Leader) blocks on accept() at a time,
+ * while all other threads (Followers) wait on the condition variable.
  */
 
-std::queue<int> client_queue;              // queue of client connections
-std::mutex queue_mutex;                    // mutex protecting the queue
-std::condition_variable queue_condition;   // worker wakeup condition variable
+std::mutex leader_mutex;                   // mutex protecting the leader token
+std::condition_variable leader_condition;  // follower wakeup condition variable
+bool leader_token_available = true;       // flag indicating if leader token is available
 std::atomic<bool> server_stop(false);     // flag to request worker shutdown
 
 /**
- * @brief Worker thread main loop.
+ * @brief Worker thread main loop implementing Leader/Follower pattern.
  *
- * Each worker waits for a client fd to appear in `client_queue`, then calls
- * `handle_client` and closes the client fd. The loop exits when `server_stop` is set.
+ * Each worker thread competes for the Leader role. Only the Leader thread
+ * blocks on accept() while all other threads (Followers) wait on the condition
+ * variable. When the Leader accepts a connection, it promotes a Follower to
+ * become the new Leader and then handles the client connection.
+ *
+ * @param sfd Listening socket file descriptor passed from main.
  */
-void worker_thread() {
+void worker_thread(int sfd) {
     while (!server_stop) {
         int client_fd = -1;
+        
+        // Phase 1: Compete for Leader role
         {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            queue_condition.wait(lock, []{ return !client_queue.empty() || server_stop; });
+            std::unique_lock<std::mutex> lock(leader_mutex);
+            // Wait until leader token becomes available or server should stop
+            leader_condition.wait(lock, []{ return leader_token_available || server_stop; });
             
-            if (server_stop && client_queue.empty()) break;
+            // If server should stop, exit the loop
+            if (server_stop) break;
             
-            if (!client_queue.empty()) {
-                client_fd = client_queue.front();
-                client_queue.pop();
-            }
+            // Acquire the leader token - become the Leader
+            leader_token_available = false;
         }
         
-        if (client_fd != -1) {
-            handle_client(client_fd);
-            ::close(client_fd);
+        // Phase 2: Leader accepts new connection
+        if (!server_stop) {
+            sockaddr_in caddr{};
+            socklen_t clen = sizeof(caddr);
+            client_fd = ::accept(sfd, (sockaddr *)&caddr, &clen);
+            
+            // Phase 3: Promote a new Leader immediately after accepting
+            {
+                std::lock_guard<std::mutex> lock(leader_mutex);
+                leader_token_available = true;
+            }
+            leader_condition.notify_one(); // Wake one Follower to become new Leader
+            
+            // Phase 4: Handle the client connection (now as a Worker)
+            if (client_fd >= 0) {
+                handle_client(client_fd);
+                ::close(client_fd);
+            } else {
+                // accept() failed (likely due to server shutdown)
+                if (server_stop) {
+                    break;
+                }
+                // On accept error, continue to next iteration
+            }
         }
     }
 }
@@ -421,14 +453,16 @@ static int sfd = -1;
 static void on_sigint(int)
 {
     g_stop = 1;
-    // Request workers to stop and wake them in case they're waiting
+    // Request workers to stop and wake all waiting Followers
     server_stop = true;
-    queue_condition.notify_all(); // wake all worker threads so they can exit
+    std::cout << "recive Ctrl+C from the user.\n";
+    /*
+    leader_condition.notify_all(); // wake all worker threads so they can exit
     if (sfd != -1)
     {
         ::close(sfd);
         sfd = -1;
-    }
+    }*/
 }
 
 /**
@@ -496,40 +530,24 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // create worker threads - Leader/Followers pattern
+    // Create worker threads implementing Leader/Follower pattern
+    // Pass the listening socket file descriptor to each worker thread
     std::vector<std::thread> workers;
     for (int i = 0; i < num_threads; ++i) {
-        workers.emplace_back(worker_thread);
+        workers.emplace_back(worker_thread, sfd);
     }
 
     std::cout << "[MultiThreadServer] Listening on port " << port 
-              << " with " << num_threads << " threads... (Ctrl+C to stop)\n" << std::flush;
+              << " with " << num_threads << " threads (Leader/Follower pattern)\n\n (Ctrl+C to stop)\n" ;
     
-    // Main accept loop: accept connections and enqueue them for worker threads
-    while (!g_stop)
-    {
-        sockaddr_in caddr{};
-        socklen_t clen = sizeof(caddr);
-        int cfd = ::accept(sfd, (sockaddr *)&caddr, &clen);
-        if (cfd < 0)
-        {
-            if (errno == EINTR && g_stop)
-                break;
-            perror("accept");
-            continue;
-        }
-        
-    // Enqueue the accepted connection for processing by worker threads
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            client_queue.push(cfd);
-        }
-    queue_condition.notify_one(); // wake one worker to handle the new connection
+    // Wait for shutdown signal - no accept loop in main with Leader/Follower pattern
+    // The worker threads handle all accept() calls through the Leader/Follower mechanism
+    while (!g_stop) {
     }
     
-    // shutdown the server and join worker threads
+    // Shutdown the server and join worker threads
     server_stop = true;
-    queue_condition.notify_all();
+    leader_condition.notify_all();
     for (auto& worker : workers) {
         if (worker.joinable()) {
             worker.join();
