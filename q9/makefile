@@ -1,0 +1,27 @@
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2  -MMD -MP -pthread
+
+SERVER_SRCS = Graph.cpp server.cpp algorithms/SCC.cpp algorithms/MST.cpp algorithms/MaxFlow.cpp algorithms/CliqueCount.cpp
+CLIENT_SRCS = client.cpp
+
+SERVER_OBJS = $(SERVER_SRCS:.cpp=.o)
+CLIENT_OBJS = $(CLIENT_SRCS:.cpp=.o)
+
+all: server client
+
+server: $(SERVER_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+client: $(CLIENT_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+clean:
+	rm -f server client $(SERVER_OBJS) $(CLIENT_OBJS) \
+	      *.d *.o algorithms/*.d algorithms/*.o
+
+-include $(SERVER_OBJS:.o=.d) $(CLIENT_OBJS:.o=.d)
+
+.PHONY: all clean
