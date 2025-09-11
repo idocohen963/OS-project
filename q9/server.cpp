@@ -1,16 +1,12 @@
 /**
  * @file server.cpp
- * @brief Multithreaded TCP server implementing Leader/Follower pattern for running graph algorithms.
+ * @brief Multithreaded TCP server using a staged Pipeline to run graph algorithms.
  *
  * The server accepts two request types (RANDOM and MANUAL). For RANDOM, the client
  * provides (vertices, edges, seed, directed_flag). For MANUAL, the client supplies
  * an explicit list of edges. The server builds the graph, runs all available
  * algorithms (via AlgorithmFactory), and returns a textual report.
  *
- * Implements a Leader/Follower concurrency pattern where only one thread (the Leader)
- * blocks on accept() at any given time, while all other threads (Followers) wait on
- * a condition variable. When the Leader accepts a connection, it promotes a Follower
- * to become the new Leader and then handles the client as a Worker.
  */
 
 #include <arpa/inet.h>
@@ -37,6 +33,7 @@
 #include <condition_variable>
 #include <queue>
 #include <atomic>
+#include <memory>
 
 #include "Graph.hpp"
 #include "algorithms/AlgorithmFactory.hpp"
@@ -305,146 +302,358 @@ static bool send_all(int fd, const std::string &s)
     return true;
 }
 
-// ==========================
-// Handle a client connection - runs all algorithms
-// ==========================
+// ======================
+// Bounded thread-safe queue (backpressure)
+// ======================
 
 /**
- * @brief Handle a single client connection.
+ * @tparam T payload type passed between adjacent pipeline stages.
  *
- * Receives a request, parses it, constructs the graph (random or manual),
- * runs all algorithms via AlgorithmFactory, and sends back a textual report.
- * Errors are reported back to the client as a short message starting with "ERROR:".
+ * A minimal bounded MPMC queue implemented with std::mutex + condition_variables.
+ * The capacity provides *backpressure*: when a downstream stage is slower,
+ * upstream producers will block in push(), preventing unbounded memory growth.
  *
- * @param cfd Connected client socket file descriptor. The caller retains responsibility
- *            for closing the descriptor after this function returns.
+ * Close semantics:
+ *  - close(): waking all blocked threads and making future push/pop fail fast.
+ *  - pop(): returns false when the queue is closed *and* empty -> stage should exit.
+ *  - push(): returns false when the queue has been closed -> producer should drop/cleanup.
+ *
+ * Note: This is intentionally simple and portable. If you need higher throughput,
+ * replace with a lock-free MPMC or a library queue keeping the same interface.
  */
-static void handle_client(int cfd)
+template <typename T>
+class BoundedQueue
 {
-    std::string req_raw;
-    // Receive the full request from the client. recv_all will return -1 on socket error.
-    // The protocol uses a blank-line terminator ("\n\n" or CRLF pair) or EOF to finish the request.
-    if (recv_all(cfd, req_raw) < 0)
+private:
+    std::mutex m_;
+    std::condition_variable cv_not_full_, cv_not_empty_;
+    std::queue<T> q_;
+    const size_t cap_;
+    bool closed_ = false;
+
+public:
+    explicit BoundedQueue(size_t cap) : cap_(cap) {}
+
+    /**
+     * @brief Enqueue a value, blocking when the queue is full.
+     * @return false if the queue is closed (value not enqueued).
+     */
+    bool push(T v)
     {
-        send_all(cfd, "ERROR: recv failed\n");
-        return;
+        std::unique_lock<std::mutex> lk(m_);
+        cv_not_full_.wait(lk, [&]
+                          { return q_.size() < cap_ || closed_; });
+        if (closed_)
+            return false;
+        q_.push(std::move(v));
+        cv_not_empty_.notify_one();
+        return true;
     }
-    std::string err;
-    // Trim and parse the request. parse_request validates parameter counts and ranges.
-    auto parsed = parse_request(trim(req_raw), err);
-    if (!parsed)
+
+    /**
+     * @brief Dequeue a value, blocking when the queue is empty.
+     * @return false if the queue is closed and empty (producer finished)
+     */
+    bool pop(T &out)
     {
-        // Send a short error back to the client and return.
-        send_all(cfd, std::string("ERROR: ") + err + "\n");
-        return;
+        std::unique_lock<std::mutex> lk(m_);
+        cv_not_empty_.wait(lk, [&]
+                           { return !q_.empty() || closed_; });
+        if (q_.empty())
+            return false;
+        out = std::move(q_.front());
+        q_.pop();
+        cv_not_full_.notify_one();
+        return true;
     }
 
-    try
+    /**
+     * @brief Close the queue, waking all blocked threads.
+     *
+     * After close(), push() and pop() will return false immediately.
+     * pop() will return false only when the queue is both closed and empty.
+     */
+    void close()
     {
-    // Build the graph (either random or from explicit edges)
-        Graph::Graph g = (parsed->kind == ParsedRequest::RANDOM)
-                             ? build_random_graph(parsed->v, parsed->e, parsed->s, parsed->d)
-                             : build_graph_from_edges(parsed->v, parsed->edges, parsed->d);
+        std::lock_guard<std::mutex> lk(m_);
+        closed_ = true;
+        cv_not_empty_.notify_all();
+        cv_not_full_.notify_all();
+    }
+};
 
-        // Send back the graph representation
-        std::ostringstream out;
-        out << "Graph:\n" << g.getGraph() << "\nResults:\n";
+// ===== Globals =====
 
-        // Run each algorithm and append its textual result.
-        for (int alg_id = 1; alg_id <= 4; ++alg_id) {
-            try {
-                // Algorithms 2 and 3 require a directed graph; if the input is undirected,
-                // report that requirement instead of running them.
-                if ((alg_id == 2 || alg_id == 3) && !g.isDirected()) {
-                    out << "Algorithm " << alg_id << ": Requires directed graph\n\n";
-                    continue;
-                }
+// Used for graceful shutdown on SIGINT
+static std::atomic<bool> g_stop{false};
+// Listening socket file descriptor
+static int sfd = -1;
 
-                // Create, run and free the algorithm instance. The run(...) call is
-                // expected to return a string describing the result
-                Algorithm* alg = AlgorithmFactory::create(alg_id);
-                if (alg) {
-                    out  << alg->run(g) << "\n\n";
-                    delete alg;
-                }
-            } catch (const std::exception &ex) {
-                // Convert algorithm failure into a textual message sent back to the client.
-                out << "Algorithm " << alg_id << " Error: " << ex.what() << "\n\n";
-            }
+// ======================
+// Pipeline payload types
+// ======================
+
+// Payloads passed between adjacent pipeline stages
+struct Conn
+{
+    int fd;
+};
+
+// Received raw request buffer
+struct RecvBuf
+{
+    int fd;
+    std::string raw;
+};
+
+// Parsed request
+struct Req
+{
+    int fd;
+    ParsedRequest pr;
+};
+
+// 
+/**
+ * @brief Shared state for collecting results from multiple algorithm tasks.
+ *
+ * All RunTask instances for the *same* client share a single ResultCollector.
+ * 'remaining' counts how many algorithms are still running; when it reaches 0,
+ * the final combined output is enqueued to the send stage.
+ */
+struct ResultCollector
+{
+    std::mutex m;
+    std::ostringstream out;
+    std::atomic<int> remaining{0};
+    int fd{-1};
+};
+
+/**
+ * @brief A single algorithm run for a given graph.
+ *
+ * Instead of "one task runs all algorithms", we create one RunTask
+ * per algorithm id, all sharing the same Graph (via shared_ptr) and ResultCollector.
+ */
+struct RunTask
+{
+    std::shared_ptr<ResultCollector> rc;
+    std::shared_ptr<const Graph::Graph> g;
+    int alg_id;
+};
+
+/**
+ * @brief Final combined reply for a client, ready to send().
+ */
+struct Result
+{
+    int fd;
+    std::string out;
+};
+
+// ====================
+// Pipeline stages 
+// ====================
+
+/**
+ * @brief Accept new client connections.
+ *
+ * Blocks in accept() until a client connects. On success, the connection
+ * is wrapped in a Conn and pushed to the recv stage. On SIGINT, the
+ * listening socket is shut down, unblocking accept() so this loop can exit.
+ *
+ * @param sfd  Listening socket file descriptor.
+ * @param qA2R Queue for accepted connections (Conn).
+ */
+static void stage_accept(int sfd, BoundedQueue<Conn> &qA2R)
+{
+    while (!g_stop.load())
+    {
+        sockaddr_in caddr{};
+        socklen_t clen = sizeof(caddr);
+        int cfd = ::accept(sfd, (sockaddr *)&caddr, &clen);
+        if (cfd < 0)
+        {
+            if (g_stop.load())
+                break;
+            continue;
         }
-
-        send_all(cfd, out.str());
-    }
-    catch (const std::exception &ex)
-    {
-        send_all(cfd, std::string("ERROR: ") + ex.what() + "\n");
+        if (!qA2R.push(Conn{cfd}))
+        {
+            ::close(cfd); // queue closed; refuse new client
+            break;
+        }
     }
 }
 
 /**
- * Leader/Follower pattern globals
- * A mutex, condition variable, and leader token flag implement the Leader/Follower
- * synchronization mechanism. Only one thread (the Leader) blocks on accept() at a time,
- * while all other threads (Followers) wait on the condition variable.
+ * @brief Receive raw request text from a client socket.
+ *
+ * Reads until a terminator ("\n\n" or "\r\n\r\n") or EOF. Produces a RecvBuf
+ * containing the client fd and the request string. On socket error, the
+ * connection is closed. If the downstream queue is closed, the connection is dropped.
+ *
+ * @param qA2R Input queue of accepted connections.
+ * @param qR2P Output queue of raw request buffers.
  */
-
-std::mutex leader_mutex;                   // mutex protecting the leader token
-std::condition_variable leader_condition;  // follower wakeup condition variable
-bool leader_token_available = true;       // flag indicating if leader token is available
-std::atomic<bool> server_stop(false);     // flag to request worker shutdown
+static void stage_recv(BoundedQueue<Conn> &qA2R, BoundedQueue<RecvBuf> &qR2P)
+{
+    Conn c;
+    while (qA2R.pop(c))
+    {
+        std::string raw;
+        if (recv_all(c.fd, raw) < 0)
+        {
+            ::close(c.fd);
+            continue;
+        }
+        if (!qR2P.push(RecvBuf{c.fd, std::move(raw)}))
+        {
+            ::close(c.fd);
+        }
+    }
+}
 
 /**
- * @brief Worker thread main loop implementing the Leader/Follower pattern.
+ * @brief Parse a raw request string into a structured Req.
  *
- * Each worker thread competes for the Leader role. Only the Leader thread
- * blocks on accept() while all other threads (Followers) wait on the condition
- * variable. When the Leader accepts a connection, it promotes a Follower to
- * become the new Leader and then handles the client connection.
+ * On success, produces a Req object and pushes it to the build stage.
+ * On parse error, sends "ERROR: ..." back to the client and closes the socket.
  *
- * @param sfd Listening socket file descriptor passed from main.
+ * @param qR2P Input queue of raw request buffers.
+ * @param qP2B Output queue of parsed requests.
  */
-void worker_thread(int sfd) {
-    while (!server_stop) {
-        int client_fd = -1;
-        
-        // Phase 1: Compete for Leader role
+static void stage_parse(BoundedQueue<RecvBuf> &qR2P, BoundedQueue<Req> &qP2B)
+{
+    RecvBuf rb;
+    while (qR2P.pop(rb))
+    {
+        std::string err;
+        auto pr = parse_request(trim(rb.raw), err);
+        if (!pr)
         {
-            std::unique_lock<std::mutex> lock(leader_mutex);
-            // Wait until leader token becomes available or server should stop
-            leader_condition.wait(lock, []{ return leader_token_available || server_stop; });
-            
-            // If server should stop, exit the loop
-            if (server_stop) break;
-            
-            // Acquire the leader token - become the Leader
-            leader_token_available = false;
+            send_all(rb.fd, "ERROR: " + err + "\n");
+            ::close(rb.fd);
+            continue;
         }
-        
-        // Phase 2: Leader accepts new connection
-        if (!server_stop) {
-            sockaddr_in caddr{};
-            socklen_t clen = sizeof(caddr);
-            client_fd = ::accept(sfd, (sockaddr *)&caddr, &clen);
-            
-            // Phase 3: Promote a new Leader immediately after accepting
+        qP2B.push(Req{rb.fd, *pr});
+    }
+}
+
+/**
+ * @brief Build a Graph and fan out RunTasks for each algorithm.
+ *
+ * For each Req:
+ *  - Builds a Graph (random or manual).
+ *  - Creates a ResultCollector shared across all algorithms for this client.
+ *  - Pushes one RunTask per algorithm id into the run stage.
+ *
+ * On error, sends "ERROR: ..." back to the client and closes the socket.
+ *
+ * @param qP2B Input queue of parsed requests.
+ * @param qRun Output queue of RunTasks for algorithm execution.
+ */
+static void stage_build(BoundedQueue<Req> &qP2B, BoundedQueue<RunTask> &qRun)
+{
+    Req rq;
+    while (qP2B.pop(rq))
+    {
+        try
+        {
+            auto gptr = std::make_shared<const Graph::Graph>(
+                (rq.pr.kind == ParsedRequest::RANDOM)
+                    ? build_random_graph(rq.pr.v, rq.pr.e, rq.pr.s, rq.pr.d)
+                    : build_graph_from_edges(rq.pr.v, rq.pr.edges, rq.pr.d));
+
+            auto rc = std::make_shared<ResultCollector>();
+            rc->fd = rq.fd;
+            rc->remaining.store(4);
             {
-                std::lock_guard<std::mutex> lock(leader_mutex);
-                leader_token_available = true;
+                std::lock_guard<std::mutex> lk(rc->m);
+                rc->out << "Graph:\n"
+                        << gptr->getGraph() << "\nResults:\n";
             }
-            leader_condition.notify_one(); // Wake one Follower to become new Leader
-            
-            // Phase 4: Handle the client connection (now as a Worker)
-            if (client_fd >= 0) {
-                handle_client(client_fd);
-                ::close(client_fd);
-            } else {
-                // accept() failed (likely due to server shutdown)
-                if (server_stop) {
-                    break;
-                }
-                // On accept error, continue to next iteration
+
+            for (int id = 1; id <= 4; ++id)
+            {
+                qRun.push(RunTask{rc, gptr, id});
             }
         }
+        catch (const std::exception &ex)
+        {
+            send_all(rq.fd, std::string("ERROR: ") + ex.what() + "\n");
+            ::close(rq.fd);
+        }
+    }
+}
+
+/**
+ * @brief Run a single algorithm on a shared Graph.
+ *
+ * Executes one algorithm (given by alg_id) on the shared Graph. Appends
+ * results into the shared ResultCollector buffer. When the last algorithm
+ * finishes (remaining == 0), enqueues the combined Result to the send stage.
+ *
+ * @param qRun   Input queue of RunTasks.
+ * @param qRun2S Output queue of final Results (ready to send).
+ */
+static void stage_run(BoundedQueue<RunTask> &qRun, BoundedQueue<Result> &qRun2S)
+{
+    RunTask t;
+    while (qRun.pop(t))
+    {
+        std::string chunk;
+        try
+        {
+            if ((t.alg_id == 2 || t.alg_id == 3) && !t.g->isDirected())
+            {
+                chunk = "Algorithm " + std::to_string(t.alg_id) +
+                        ": Requires directed graph\n\n";
+            }
+            else
+            {
+                std::unique_ptr<Algorithm> alg(AlgorithmFactory::create(t.alg_id));
+                if (alg)
+                {
+                    chunk = alg->run(*t.g) + std::string("\n\n");
+                }
+            }
+        }
+        catch (const std::exception &ex)
+        {
+            chunk = "Algorithm " + std::to_string(t.alg_id) +
+                    " Error: " + ex.what() + "\n\n";
+        }
+
+        // Append the chunk to the ResultCollector's output
+        {
+            std::lock_guard<std::mutex> lk(t.rc->m);
+            t.rc->out << chunk;
+        }
+
+        // If this was the last algorithm to finish, push the final result to the send stage
+        if (t.rc->remaining.fetch_sub(1) == 1)
+        {
+            qRun2S.push(Result{t.rc->fd, t.rc->out.str()});
+        }
+    }
+}
+
+/**
+ * @brief Send the final combined result to the client.
+ *
+ * Sends the aggregated output stored in ResultCollector to the client
+ * socket, then closes the connection.
+ *
+ * @param qRun2S Input queue of completed Results.
+ */
+static void stage_send(BoundedQueue<Result> &qRun2S)
+{
+    Result r;
+    while (qRun2S.pop(r))
+    {
+        send_all(r.fd, r.out);
+        ::close(r.fd);
     }
 }
 
@@ -452,24 +661,19 @@ void worker_thread(int sfd) {
 // Main
 // ==========================
 
-static volatile sig_atomic_t g_stop = 0;
-static int sfd = -1;
-
 /**
- * @brief Signal handler for SIGINT (Ctrl+C).
+ * @brief Signal handler for SIGINT to initiate graceful shutdown.
  *
- * Sets the global stop flag to initiate server shutdown (notifies all worker threads
- * to stop), and interrupts any ongoing accept() calls by shutting down the listening socket.
+ * Sets the global stop flag and shuts down the listening socket to
+ * interrupt any blocking accept() call.
+ *
  */
 static void on_sigint(int)
 {
-    g_stop = 1;
-    // Request workers to stop and wake all waiting Followers
-    server_stop = true;
-    std::cout << "recive Ctrl+C from the user.\n";
-    
+    g_stop.store(true);
     // Interrupt the accept() call by shutting down the socket
-    if (sfd != -1) {
+    if (sfd != -1)
+    {
         ::shutdown(sfd, SHUT_RDWR);
     }
 }
@@ -500,7 +704,8 @@ int main(int argc, char **argv)
         {
         case 't':
             num_threads = std::atoi(optarg);
-            if (num_threads <= 0) {
+            if (num_threads <= 0)
+            {
                 std::cerr << "Number of threads must be positive\n";
                 return 1;
             }
@@ -538,41 +743,101 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Create worker threads implementing Leader/Follower pattern
-    // Pass the listening socket file descriptor to each worker thread
-    std::vector<std::thread> workers;
-    for (int i = 0; i < num_threads; ++i) {
-        workers.emplace_back(worker_thread, sfd);
+    // ==========================
+    // Pipeline queues and threads
+    // ==========================
+
+    // ---- Pipeline queues between stages ----
+
+    // Sizes chosen to provide some buffering while limiting memory usage
+    BoundedQueue<Conn> qA2R(std::max(64, 16 * num_threads));
+    BoundedQueue<RecvBuf> qR2P(std::max(64, 16 * num_threads));
+    BoundedQueue<Req> qP2B(std::max(64, 8 * num_threads));
+    BoundedQueue<RunTask> qRun(std::max(32, 4 * num_threads));
+    BoundedQueue<Result> qRun2S(std::max(64, 16 * num_threads));
+
+    // ---- Pipeline threads per stage ----
+
+    // Distribute threads among stages, ensuring at least one thread per stage
+    int nRecv = std::max(2, num_threads / 2);
+    int nParse = std::max(2, num_threads / 2);
+    int nBuild = std::max(1, num_threads / 3);
+    int nRun = std::max(1, num_threads / 3);
+    int nSend = std::max(2, num_threads / 2);
+
+    // ---- Spawner helper ----
+    /**
+     * @brief Spawn 'n' identical worker threads running the given callable.
+     * 
+     * @param n Number of threads to spawn.
+     * @param fn Callable to run in each thread.
+     * @return Vector of joinable threads.
+     */
+    auto spawn = [](int n, auto &&fn)
+    {
+        std::vector<std::thread> v;
+        v.reserve(n);
+        for (int i = 0; i < n; ++i)
+            v.emplace_back(fn);
+        return v;
+    };
+
+    // ---- Launch stages ----
+    std::thread acceptor([&]
+                         { stage_accept(sfd, qA2R); });
+    auto recv_threads = spawn(nRecv, [&]
+                              { stage_recv(qA2R, qR2P); });
+    auto parse_threads = spawn(nParse, [&]
+                               { stage_parse(qR2P, qP2B); });
+    auto build_threads = spawn(nBuild, [&]
+                               { stage_build(qP2B, qRun); });
+    auto run_threads = spawn(nRun, [&]
+                             { stage_run(qRun, qRun2S); });
+    auto send_threads = spawn(nSend, [&]
+                              { stage_send(qRun2S); });
+
+    std::cout << "[MultiThreadServer] Listening on port " << port << "\n"
+              << "threads per stage: \n"
+              << "Accept:1, Recv:" << nRecv << ", Parse:" << nParse
+              << ", Build:" << nBuild << ", Run:" << nRun << ", Send:" << nSend << "\n"
+              << "(Ctrl+C to stop)\n";
+
+    // Wait for shutdown signal; pipeline threads handle all work
+    while (!g_stop.load())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    std::cout << "[MultiThreadServer] Listening on port " << port 
-              << " with " << num_threads << " threads (Leader/Follower pattern)\n\n (Ctrl+C to stop)\n" ;
-    
-    // Wait for shutdown signal - no accept loop in main with Leader/Follower pattern
-    // The worker threads handle all accept() calls through the Leader/Follower mechanism
-    while (!g_stop) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
-
-    }
-    
-    // Shutdown the server and join worker threads
-    // Notify all waiting threads to exit
-    server_stop = true;
-    leader_condition.notify_all();
-
-    // Close the listening socket
-    if (sfd != -1) {
+    // ---- Graceful shutdown ----
+    if (sfd != -1)
+    {
         ::close(sfd);
         sfd = -1;
     }
+    qA2R.close();
+    qR2P.close();
+    qP2B.close();
+    qRun.close();
+    qRun2S.close();
 
-    // Join all worker threads
-    for (auto& worker : workers) {
-        if (worker.joinable()) {
-            worker.join();
-        }
-    }
+    if (acceptor.joinable())
+        acceptor.join();
+    for (auto &t : recv_threads)
+        if (t.joinable())
+            t.join();
+    for (auto &t : parse_threads)
+        if (t.joinable())
+            t.join();
+    for (auto &t : build_threads)
+        if (t.joinable())
+            t.join();
+    for (auto &t : run_threads)
+        if (t.joinable())
+            t.join();
+    for (auto &t : send_threads)
+        if (t.joinable())
+            t.join();
 
-    std::cout << "[MultiThreadServer] Stopped.\n";
+    std::cout << "[Multithread] Stopped.\n";
     return 0;
 }
