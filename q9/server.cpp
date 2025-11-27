@@ -413,46 +413,21 @@ struct Req
     ParsedRequest pr;
 };
 
-// 
 /**
- * @brief Shared state for collecting results from multiple algorithm tasks.
+ * @brief Job representing a graph processing task for a client.
  *
- * All RunTask instances for the *same* client share a single ResultCollector.
- * 'remaining' counts how many algorithms are still running; when it reaches 0,
- * the final combined output is enqueued to the send stage.
+ * Contains the client socket file descriptor, a shared pointer to the graph,
+ * and an output string for accumulating results.
  */
-struct ResultCollector
-{
-    std::mutex m;
-    std::ostringstream out;
-    std::atomic<int> remaining{0};
-    int fd{-1};
-};
-
-/**
- * @brief A single algorithm run for a given graph.
- *
- * Instead of "one task runs all algorithms", we create one RunTask
- * per algorithm id, all sharing the same Graph (via shared_ptr) and ResultCollector.
- */
-struct RunTask
-{
-    std::shared_ptr<ResultCollector> rc;
-    std::shared_ptr<const Graph::Graph> g;
-    int alg_id;
-};
-
-/**
- * @brief Final combined reply for a client, ready to send().
- */
-struct Result
+struct Job
 {
     int fd;
+    std::shared_ptr<const Graph::Graph> g;
     std::string out;
 };
 
 // ====================
-// Pipeline stages 
+// Pipeline stages
 // ====================
 
 /**
@@ -541,19 +516,20 @@ static void stage_parse(BoundedQueue<RecvBuf> &qR2P, BoundedQueue<Req> &qP2B)
 }
 
 /**
- * @brief Build a Graph and fan out RunTasks for each algorithm.
+ * @brief Build a Graph from the parsed request.
  *
  * For each Req:
  *  - Builds a Graph (random or manual).
- *  - Creates a ResultCollector shared across all algorithms for this client.
- *  - Pushes one RunTask per algorithm id into the run stage.
+ *  - Creates a Job containing the client fd, shared Graph pointer, and initial output string.
+ *  - Pushes the Job to the first algorithm stage.
  *
  * On error, sends "ERROR: ..." back to the client and closes the socket.
  *
  * @param qP2B Input queue of parsed requests.
- * @param qRun Output queue of RunTasks for algorithm execution.
+ * @param qB2A1 Output queue of Jobs for the first algorithm stage.
  */
-static void stage_build(BoundedQueue<Req> &qP2B, BoundedQueue<RunTask> &qRun)
+static void stage_build(BoundedQueue<Req> &qP2B,
+                        BoundedQueue<Job> &qB2A1) // Build -> Algo1
 {
     Req rq;
     while (qP2B.pop(rq))
@@ -565,19 +541,15 @@ static void stage_build(BoundedQueue<Req> &qP2B, BoundedQueue<RunTask> &qRun)
                     ? build_random_graph(rq.pr.v, rq.pr.e, rq.pr.s, rq.pr.d)
                     : build_graph_from_edges(rq.pr.v, rq.pr.edges, rq.pr.d));
 
-            auto rc = std::make_shared<ResultCollector>();
-            rc->fd = rq.fd;
-            rc->remaining.store(4);
-            {
-                std::lock_guard<std::mutex> lk(rc->m);
-                rc->out << "Graph:\n"
-                        << gptr->getGraph() << "\nResults:\n";
-            }
+            Job job;
+            job.fd = rq.fd;
+            job.g = gptr;
+            std::ostringstream oss;
+            oss << "Graph:\n"
+                << gptr->getGraph() << "\nResults:\n";
+            job.out = oss.str();
 
-            for (int id = 1; id <= 4; ++id)
-            {
-                qRun.push(RunTask{rc, gptr, id});
-            }
+            qB2A1.push(std::move(job));
         }
         catch (const std::exception &ex)
         {
@@ -587,73 +559,61 @@ static void stage_build(BoundedQueue<Req> &qP2B, BoundedQueue<RunTask> &qRun)
     }
 }
 
-/**
- * @brief Run a single algorithm on a shared Graph.
+/* @brief Run a single algorithm on a shared Graph.
  *
  * Executes one algorithm (given by alg_id) on the shared Graph. Appends
- * results into the shared ResultCollector buffer. When the last algorithm
- * finishes (remaining == 0), enqueues the combined Result to the send stage.
+ * results into the Job's output string. Pushes the updated Job to the next stage.
  *
- * @param qRun   Input queue of RunTasks.
- * @param qRun2S Output queue of final Results (ready to send).
+ * @param qin   Input queue of Jobs.
+ * @param qout  Output queue of Jobs for the next algorithm stage or send stage.
+ * @param alg_id Algorithm ID to run.
+ * @param requires_directed Whether the algorithm requires a directed graph.
  */
-static void stage_run(BoundedQueue<RunTask> &qRun, BoundedQueue<Result> &qRun2S)
+static void stage_algo_generic(BoundedQueue<Job> &qin,
+                               BoundedQueue<Job> &qout,
+                               int alg_id,
+                               bool requires_directed)
 {
-    RunTask t;
-    while (qRun.pop(t))
+    Job job;
+    while (qin.pop(job))
     {
-        std::string chunk;
         try
         {
-            if ((t.alg_id == 2 || t.alg_id == 3) && !t.g->isDirected())
+            if (requires_directed && !job.g->isDirected())
             {
-                chunk = "Algorithm " + std::to_string(t.alg_id) +
-                        ": Requires directed graph\n\n";
+                job.out += "Algorithm " + std::to_string(alg_id) +
+                           ": Requires directed graph\n\n";
             }
             else
             {
-                std::unique_ptr<Algorithm> alg(AlgorithmFactory::create(t.alg_id));
+                std::unique_ptr<Algorithm> alg(AlgorithmFactory::create(alg_id));
                 if (alg)
                 {
-                    chunk = alg->run(*t.g) + std::string("\n\n");
+                    job.out += alg->run(*job.g) + "\n\n";
                 }
             }
         }
         catch (const std::exception &ex)
         {
-            chunk = "Algorithm " + std::to_string(t.alg_id) +
-                    " Error: " + ex.what() + "\n\n";
+            job.out += "Algorithm " + std::to_string(alg_id) +
+                       " Error: " + ex.what() + "\n\n";
         }
-
-        // Append the chunk to the ResultCollector's output
-        {
-            std::lock_guard<std::mutex> lk(t.rc->m);
-            t.rc->out << chunk;
-        }
-
-        // If this was the last algorithm to finish, push the final result to the send stage
-        if (t.rc->remaining.fetch_sub(1) == 1)
-        {
-            qRun2S.push(Result{t.rc->fd, t.rc->out.str()});
-        }
+        qout.push(std::move(job));
     }
 }
 
 /**
- * @brief Send the final combined result to the client.
+ * @brief Send the final results back to the client and close the socket.
  *
- * Sends the aggregated output stored in ResultCollector to the client
- * socket, then closes the connection.
- *
- * @param qRun2S Input queue of completed Results.
+ * @param qA4S Input queue of completed Jobs ready to send.
  */
-static void stage_send(BoundedQueue<Result> &qRun2S)
+static void stage_send(BoundedQueue<Job> &qA4S)
 {
-    Result r;
-    while (qRun2S.pop(r))
+    Job job;
+    while (qA4S.pop(job))
     {
-        send_all(r.fd, r.out);
-        ::close(r.fd);
+        send_all(job.fd, job.out);
+        ::close(job.fd);
     }
 }
 
@@ -693,7 +653,7 @@ static void on_sigint(int)
  */
 int main(int argc, char **argv)
 {
-    int port = 8080;
+    int port = 9080;
     int num_threads = 10; // default number of worker threads
     int opt;
 
@@ -753,53 +713,44 @@ int main(int argc, char **argv)
     BoundedQueue<Conn> qA2R(std::max(64, 16 * num_threads));
     BoundedQueue<RecvBuf> qR2P(std::max(64, 16 * num_threads));
     BoundedQueue<Req> qP2B(std::max(64, 8 * num_threads));
-    BoundedQueue<RunTask> qRun(std::max(32, 4 * num_threads));
-    BoundedQueue<Result> qRun2S(std::max(64, 16 * num_threads));
 
-    // ---- Pipeline threads per stage ----
+    BoundedQueue<Job> qB2A1(std::max(64, 4 * num_threads));
+    BoundedQueue<Job> qA1A2(std::max(64, 4 * num_threads));
+    BoundedQueue<Job> qA2A3(std::max(64, 4 * num_threads));
+    BoundedQueue<Job> qA3A4(std::max(64, 4 * num_threads));
 
-    // Distribute threads among stages, ensuring at least one thread per stage
-    int nRecv = std::max(2, num_threads / 2);
-    int nParse = std::max(2, num_threads / 2);
-    int nBuild = std::max(1, num_threads / 3);
-    int nRun = std::max(1, num_threads / 3);
-    int nSend = std::max(2, num_threads / 2);
+    BoundedQueue<Job> qA4S(std::max(64, 4 * num_threads));
 
-    // ---- Spawner helper ----
-    /**
-     * @brief Spawn 'n' identical worker threads running the given callable.
-     * 
-     * @param n Number of threads to spawn.
-     * @param fn Callable to run in each thread.
-     * @return Vector of joinable threads.
-     */
-    auto spawn = [](int n, auto &&fn)
-    {
-        std::vector<std::thread> v;
-        v.reserve(n);
-        for (int i = 0; i < n; ++i)
-            v.emplace_back(fn);
-        return v;
-    };
 
     // ---- Launch stages ----
     std::thread acceptor([&]
                          { stage_accept(sfd, qA2R); });
-    auto recv_threads = spawn(nRecv, [&]
-                              { stage_recv(qA2R, qR2P); });
-    auto parse_threads = spawn(nParse, [&]
-                               { stage_parse(qR2P, qP2B); });
-    auto build_threads = spawn(nBuild, [&]
-                               { stage_build(qP2B, qRun); });
-    auto run_threads = spawn(nRun, [&]
-                             { stage_run(qRun, qRun2S); });
-    auto send_threads = spawn(nSend, [&]
-                              { stage_send(qRun2S); });
 
-    std::cout << "[MultiThreadServer] Listening on port " << port << "\n"
-              << "threads per stage: \n"
-              << "Accept:1, Recv:" << nRecv << ", Parse:" << nParse
-              << ", Build:" << nBuild << ", Run:" << nRun << ", Send:" << nSend << "\n"
+    std::thread recv_thread([&]
+                            { stage_recv(qA2R, qR2P); });
+
+    std::thread parse_thread([&]
+                             { stage_parse(qR2P, qP2B); });
+
+    std::thread build_thread([&]
+                             { stage_build(qP2B, qB2A1); });
+
+    std::thread algo1_thread([&]
+                             { stage_algo_generic(qB2A1, qA1A2, 1, false); });
+
+    std::thread algo2_thread([&]
+                             { stage_algo_generic(qA1A2, qA2A3, 2, true); });
+
+    std::thread algo3_thread([&]
+                             { stage_algo_generic(qA2A3, qA3A4, 3, true); });
+
+    std::thread algo4_thread([&]
+                             { stage_algo_generic(qA3A4, qA4S, 4, false); });
+
+    std::thread send_thread([&]
+                            { stage_send(qA4S); });
+
+    std::cout << "[PipelineServer] Listening on port " << port << "\n\n"
               << "(Ctrl+C to stop)\n";
 
     // Wait for shutdown signal; pipeline threads handle all work
@@ -817,26 +768,30 @@ int main(int argc, char **argv)
     qA2R.close();
     qR2P.close();
     qP2B.close();
-    qRun.close();
-    qRun2S.close();
+    qB2A1.close();
+    qA1A2.close();
+    qA2A3.close();
+    qA3A4.close();
+    qA4S.close();
 
     if (acceptor.joinable())
         acceptor.join();
-    for (auto &t : recv_threads)
-        if (t.joinable())
-            t.join();
-    for (auto &t : parse_threads)
-        if (t.joinable())
-            t.join();
-    for (auto &t : build_threads)
-        if (t.joinable())
-            t.join();
-    for (auto &t : run_threads)
-        if (t.joinable())
-            t.join();
-    for (auto &t : send_threads)
-        if (t.joinable())
-            t.join();
+    if (recv_thread.joinable())
+        recv_thread.join();
+    if (parse_thread.joinable())
+        parse_thread.join();
+    if (build_thread.joinable())
+        build_thread.join();
+    if (algo1_thread.joinable())
+        algo1_thread.join();
+    if (algo2_thread.joinable())
+        algo2_thread.join();
+    if (algo3_thread.joinable())
+        algo3_thread.join();
+    if (algo4_thread.joinable())
+        algo4_thread.join();
+    if (send_thread.joinable())
+        send_thread.join();
 
     std::cout << "[Multithread] Stopped.\n";
     return 0;
