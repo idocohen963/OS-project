@@ -18,10 +18,43 @@ client: $(CLIENT_OBJS)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+results-dir:
+	mkdir -p results
+
+# Valgrind targets for server
+valgrind-memcheck-server: server results-dir
+	mkdir -p results
+	timeout 5s valgrind --leak-check=full --show-leak-kinds=all ./server 2> results/memcheck_server.txt || true
+
+valgrind-helgrind-server: server results-dir
+	mkdir -p results
+	timeout 5s valgrind --tool=helgrind ./server 2> results/helgrind_server.txt || true
+
+valgrind-cg-server: server results-dir
+	mkdir -p results
+	timeout 5s valgrind --tool=callgrind ./server 2> results/cg_server.txt || true
+
+# Valgrind targets for client (with test parameters)
+valgrind-memcheck-client: client server results-dir
+	mkdir -p results
+	./server & SERVER_PID=$$!; sleep 5; valgrind --leak-check=full --show-leak-kinds=all ./client --random -v 10 -e 30 -s 42 2> results/memcheck_client.txt; kill $$SERVER_PID 2>/dev/null || true
+
+valgrind-helgrind-client: client server results-dir
+	mkdir -p results
+	./server & SERVER_PID=$$!; sleep 5; valgrind --tool=helgrind ./client --random -v 10 -e 30 -s 42 2> results/helgrind_client.txt; kill $$SERVER_PID 2>/dev/null || true
+
+valgrind-cg-client: client server results-dir
+	mkdir -p results
+	./server & SERVER_PID=$$!; sleep 5; valgrind --tool=callgrind ./client --random -v 10 -e 30 -s 42 2> results/cg_client.txt; kill $$SERVER_PID 2>/dev/null || true
+
+# Run all valgrind analyses
+valgrind-all: all valgrind-memcheck-server valgrind-helgrind-server valgrind-cg-server valgrind-memcheck-client valgrind-helgrind-client valgrind-cg-client
+
 clean:
 	rm -f server client $(SERVER_OBJS) $(CLIENT_OBJS) \
-	      *.d *.o algorithms/*.d algorithms/*.o
+		  *.d *.o algorithms/*.d algorithms/*.o \
+		  callgrind.out.*
 
 -include $(SERVER_OBJS:.o=.d) $(CLIENT_OBJS:.o=.d)
 
-.PHONY: all clean
+.PHONY: all clean results-dir valgrind-all

@@ -1,0 +1,11 @@
+==82643== Callgrind, a call-graph generating cache profiler
+==82643== Copyright (C) 2002-2017, and GNU GPL'd, by Josef Weidendorfer et al.
+==82643== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==82643== Command: ./client --random -v 10 -e 30 -s 42
+==82643== 
+==82643== For interactive control, run 'callgrind_control -h'.
+==82643== 
+==82643== Events    : Ir
+==82643== Collected : 1985709
+==82643== 
+==82643== I   refs:      1,985,709

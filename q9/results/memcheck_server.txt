@@ -1,0 +1,244 @@
+==88568== Memcheck, a memory error detector
+==88568== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==88568== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==88568== Command: ./server
+==88568== 
+==88568== 
+==88568== Process terminating with default action of signal 15 (SIGTERM)
+==88568==    at 0x4BF9ADF: clock_nanosleep@@GLIBC_2.17 (clock_nanosleep.c:78)
+==88568==    by 0x4C06A26: nanosleep (nanosleep.c:25)
+==88568==    by 0x10E656: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== HEAP SUMMARY:
+==88568==     in use at exit: 82,216 bytes in 36 blocks
+==88568==   total heap usage: 36 allocs, 0 frees, 82,216 bytes allocated
+==88568== 
+==88568== 16 bytes in 1 blocks are still reachable in loss record 1 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E2B9: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 16 bytes in 1 blocks are still reachable in loss record 2 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E5AC: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 24 bytes in 1 blocks are still reachable in loss record 3 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E31C: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 24 bytes in 1 blocks are still reachable in loss record 4 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E374: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 24 bytes in 1 blocks are still reachable in loss record 5 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E3D0: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 24 bytes in 1 blocks are still reachable in loss record 6 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E430: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 24 bytes in 1 blocks are still reachable in loss record 7 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E48F: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 24 bytes in 1 blocks are still reachable in loss record 8 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E4EE: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 24 bytes in 1 blocks are still reachable in loss record 9 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E54D: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 64 bytes in 1 blocks are still reachable in loss record 10 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10DF94: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 64 bytes in 1 blocks are still reachable in loss record 11 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E091: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 64 bytes in 1 blocks are still reachable in loss record 12 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E18E: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 64 bytes in 1 blocks are still reachable in loss record 13 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167CC: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E244: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 64 bytes in 1 blocks are still reachable in loss record 14 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167CC: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E25C: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 64 bytes in 1 blocks are still reachable in loss record 15 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167CC: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E274: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 64 bytes in 1 blocks are still reachable in loss record 16 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167CC: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E28C: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 64 bytes in 1 blocks are still reachable in loss record 17 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167CC: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E2A4: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 18 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E2FF: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 19 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E357: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 20 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E3B3: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 21 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E414: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 22 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E473: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 23 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E4D2: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 24 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E531: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 25 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E590: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 304 bytes in 1 blocks are possibly lost in loss record 26 of 36
+==88568==    at 0x484D953: calloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x40145AB: calloc (rtld-malloc.h:44)
+==88568==    by 0x40145AB: allocate_dtv (dl-tls.c:370)
+==88568==    by 0x40145AB: _dl_allocate_tls (dl-tls.c:629)
+==88568==    by 0x4BAA616: allocate_stack (allocatestack.c:429)
+==88568==    by 0x4BAA616: pthread_create@@GLIBC_2.34 (pthread_create.c:655)
+==88568==    by 0x494DEB0: std::thread::_M_start_thread(std::unique_ptr<std::thread::_State, std::default_delete<std::thread::_State> >, void (*)()) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E5E3: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 480 bytes in 1 blocks are still reachable in loss record 27 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E0BB: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 504 bytes in 1 blocks are still reachable in loss record 28 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10E1B8: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 504 bytes in 1 blocks are still reachable in loss record 29 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167F4: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E244: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 504 bytes in 1 blocks are still reachable in loss record 30 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167F4: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E25C: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 504 bytes in 1 blocks are still reachable in loss record 31 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167F4: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E274: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 504 bytes in 1 blocks are still reachable in loss record 32 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167F4: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E28C: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 504 bytes in 1 blocks are still reachable in loss record 33 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x1167F4: BoundedQueue<Job>::BoundedQueue(unsigned long) (in /home/idoc/projects/os_4/q9/server)
+==88568==    by 0x10E2A4: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 512 bytes in 1 blocks are still reachable in loss record 34 of 36
+==88568==    at 0x4846FA3: operator new(unsigned long) (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x10DFBE: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 1,024 bytes in 1 blocks are still reachable in loss record 35 of 36
+==88568==    at 0x4846828: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x4B921B4: _IO_file_doallocate (filedoalloc.c:101)
+==88568==    by 0x4BA2523: _IO_doallocbuf (genops.c:347)
+==88568==    by 0x4B9FF8F: _IO_file_overflow@@GLIBC_2.2.5 (fileops.c:745)
+==88568==    by 0x4BA0AAE: _IO_new_file_xsputn (fileops.c:1244)
+==88568==    by 0x4BA0AAE: _IO_file_xsputn@@GLIBC_2.2.5 (fileops.c:1197)
+==88568==    by 0x4B93A11: fwrite (iofwrite.c:39)
+==88568==    by 0x49B7DC3: std::basic_ostream<char, std::char_traits<char> >& std::__ostream_insert<char, std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*, long) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x49B813B: std::basic_ostream<char, std::char_traits<char> >& std::operator<< <std::char_traits<char> >(std::basic_ostream<char, std::char_traits<char> >&, char const*) (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x10E601: main (in /home/idoc/projects/os_4/q9/server)
+==88568== 
+==88568== 73,728 bytes in 1 blocks are still reachable in loss record 36 of 36
+==88568==    at 0x4846828: malloc (in /usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so)
+==88568==    by 0x491838E: ??? (in /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33)
+==88568==    by 0x400571E: call_init.part.0 (dl-init.c:74)
+==88568==    by 0x4005823: call_init (dl-init.c:120)
+==88568==    by 0x4005823: _dl_init (dl-init.c:121)
+==88568==    by 0x401F59F: ??? (in /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2)
+==88568== 
+==88568== LEAK SUMMARY:
+==88568==    definitely lost: 0 bytes in 0 blocks
+==88568==    indirectly lost: 0 bytes in 0 blocks
+==88568==      possibly lost: 2,736 bytes in 9 blocks
+==88568==    still reachable: 79,480 bytes in 27 blocks
+==88568==         suppressed: 0 bytes in 0 blocks
+==88568== 
+==88568== For lists of detected and suppressed errors, rerun with: -s
+==88568== ERROR SUMMARY: 9 errors from 9 contexts (suppressed: 0 from 0)
