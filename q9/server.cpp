@@ -17,7 +17,6 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
-#include <getopt.h>
 #include <iostream>
 #include <optional>
 #include <sstream>
@@ -128,7 +127,7 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
 
         if (r.v <= 0 || r.e < 0)
         {
-            err = " parameters not actual or positive numbers.";
+            err = "Invalid vertices or edges";
             return std::nullopt;
         }
         return r;
@@ -141,7 +140,7 @@ static std::optional<ParsedRequest> parse_request(const std::string &text, std::
         if (!(in >> r.v >> r.e))
         {
             err = "Usage: MANUAL <vertices> <edges> [directed]\n"
-                  "<edge_1_src> <edge_1_dest> [weight_1]  ... <edge_N_src> <edge_N_dest> [weight_N]\n";
+                  "<edge_1_src> <edge_1_dest> ... <edge_N_src> <edge_N_dest>\n";
             return std::nullopt;
         }
 
@@ -639,42 +638,23 @@ static void on_sigint(int)
 }
 
 /**
- * @brief Server entry point.
+ * @brief Pipeline-based multithreaded server entry point.
  *
- * Command-line options:
- * -t <threads> Number of worker threads (default 10).
+ * This server uses a fixed pipeline of stages:
+ * accept → recv → parse → build → algo1 → algo2 → algo3 → algo4 → send.
+ * Each stage runs in its own dedicated thread and communicates via bounded queues.
  *
- * Initializes the server, creates worker threads, and listens for incoming
- * connections. Implements graceful shutdown on SIGINT.
+ * Supports RANDOM and MANUAL request formats and runs all 4 graph algorithms
+ * (via AlgorithmFactory) as pipeline stages.
  *
- * @param argc Argument count.
- * @param argv Argument vector.
+ * Graceful shutdown is handled via SIGINT.
+ *
  * @return exit status.
  */
-int main(int argc, char **argv)
+int main()
 {
-    int port = 9080;
-    int num_threads = 10; // default number of worker threads
-    int opt;
-
-    // Allow overriding the number of worker threads via a command-line option
-    while ((opt = ::getopt(argc, argv, "t:")) != -1)
-    {
-        switch (opt)
-        {
-        case 't':
-            num_threads = std::atoi(optarg);
-            if (num_threads <= 0)
-            {
-                std::cerr << "Number of threads must be positive\n";
-                return 1;
-            }
-            break;
-        default:
-            std::cerr << "Usage: " << argv[0] << " -t <threads>\n";
-            return 1;
-        }
-    }
+    int port = 8080;
+    constexpr size_t QUEUE_CAP = 64;
 
     std::signal(SIGINT, on_sigint);
 
@@ -710,17 +690,16 @@ int main(int argc, char **argv)
     // ---- Pipeline queues between stages ----
 
     // Sizes chosen to provide some buffering while limiting memory usage
-    BoundedQueue<Conn> qA2R(std::max(64, 16 * num_threads));
-    BoundedQueue<RecvBuf> qR2P(std::max(64, 16 * num_threads));
-    BoundedQueue<Req> qP2B(std::max(64, 8 * num_threads));
+    BoundedQueue<Conn> qA2R(QUEUE_CAP);
+    BoundedQueue<RecvBuf> qR2P(QUEUE_CAP);
+    BoundedQueue<Req> qP2B(QUEUE_CAP);
 
-    BoundedQueue<Job> qB2A1(std::max(64, 4 * num_threads));
-    BoundedQueue<Job> qA1A2(std::max(64, 4 * num_threads));
-    BoundedQueue<Job> qA2A3(std::max(64, 4 * num_threads));
-    BoundedQueue<Job> qA3A4(std::max(64, 4 * num_threads));
+    BoundedQueue<Job> qB2A1(QUEUE_CAP);
+    BoundedQueue<Job> qA1A2(QUEUE_CAP);
+    BoundedQueue<Job> qA2A3(QUEUE_CAP);
+    BoundedQueue<Job> qA3A4(QUEUE_CAP);
 
-    BoundedQueue<Job> qA4S(std::max(64, 4 * num_threads));
-
+    BoundedQueue<Job> qA4S(QUEUE_CAP);
 
     // ---- Launch stages ----
     std::thread acceptor([&]
