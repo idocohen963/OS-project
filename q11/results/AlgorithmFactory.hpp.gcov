@@ -1,0 +1,44 @@
+        -:    0:Source:algorithms/AlgorithmFactory.hpp
+        -:    1:#ifndef ALGORITHM_FACTORY_HPP
+        -:    2:#define ALGORITHM_FACTORY_HPP
+        -:    3:
+        -:    4:#include "Algorithm.hpp"
+        -:    5:#include "SCC.hpp"
+        -:    6:#include "MST.hpp"
+        -:    7:#include "MaxFlow.hpp"
+        -:    8:#include "CliqueCount.hpp"
+        -:    9:#include <string>
+        -:   10:
+        -:   11:/**
+        -:   12: * @class AlgorithmFactory
+        -:   13: * @brief Factory class for creating graph algorithm instances.
+        -:   14: * 
+        -:   15: * This factory implements the Factory design pattern to create instances
+        -:   16: * of different graph algorithms based on string identifiers. It centralizes
+        -:   17: * algorithm creation and provides a clean interface for algorithm selection.
+        -:   18: * 
+        -:   19: * Supported algorithms:
+        -:   20: * - "scc": Strongly Connected Components algorithm (Kosaraju's algorithm)
+        -:   21: * - "maxflow": Maximum Flow algorithm (Ford-Fulkerson with BFS)
+        -:   22: * - "mst": Minimum Spanning Tree algorithm (Prim's algorithm)
+        -:   23: * - "clique": Clique counting algorithm (brute force enumeration)
+        -:   24: * 
+        -:   25: */
+        -:   26:class AlgorithmFactory {
+        -:   27:public:
+        -:   28:    /**
+        -:   29:     * @brief Creates an algorithm instance based on the given name.
+        -:   30:     * @param name The name identifier of the algorithm to create
+        -:   31:     * @return A pointer to the created Algorithm instance, or nullptr if the name is not recognized
+        -:   32:     * 
+        -:   33:     */
+       26:   34:    static Algorithm* create(const int alg_id) {
+       26:   35:        if (alg_id == 1) return new MST();           // Minimum Spanning Tree
+       16:   36:        if (alg_id == 2) return new SCC();           // Strongly Connected Components
+       13:   37:        if (alg_id == 3) return new MaxFlow();   // Maximum Flow
+       10:   38:        if (alg_id == 4) return new CliqueCount(); // Clique Count
+    #####:   39:        return nullptr;  // Unknown algorithm name
+        -:   40:    }
+        -:   41:};
+        -:   42:
+        -:   43:#endif // ALGORITHM_FACTORY_HPP

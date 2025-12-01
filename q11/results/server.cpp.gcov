@@ -1,0 +1,959 @@
+        -:    0:Source:server.cpp
+        -:    1:/**
+        -:    2: * @file server.cpp
+        -:    3: * @brief Multithreaded TCP server using a staged Pipeline to run graph algorithms.
+        -:    4: *
+        -:    5: * The server accepts two request types (RANDOM and MANUAL). For RANDOM, the client
+        -:    6: * provides (vertices, edges, seed, directed_flag). For MANUAL, the client supplies
+        -:    7: * an explicit list of edges. The server builds the graph, runs all available
+        -:    8: * algorithms (via AlgorithmFactory), and returns a textual report.
+        -:    9: *
+        -:   10: */
+        -:   11:
+        -:   12:#include <arpa/inet.h>
+        -:   13:#include <netinet/in.h>
+        -:   14:#include <sys/socket.h>
+        -:   15:#include <unistd.h>
+        -:   16:#include <cerrno>
+        -:   17:#include <csignal>
+        -:   18:#include <cstdlib>
+        -:   19:#include <cstring>
+        -:   20:#include <getopt.h>
+        -:   21:#include <iostream>
+        -:   22:#include <optional>
+        -:   23:#include <sstream>
+        -:   24:#include <stdexcept>
+        -:   25:#include <string>
+        -:   26:#include <tuple>
+        -:   27:#include <utility>
+        -:   28:#include <vector>
+        -:   29:#include <random>
+        -:   30:#include <algorithm>
+        -:   31:#include <thread>
+        -:   32:#include <mutex>
+        -:   33:#include <condition_variable>
+        -:   34:#include <queue>
+        -:   35:#include <atomic>
+        -:   36:#include <memory>
+        -:   37:
+        -:   38:#include "Graph.hpp"
+        -:   39:#include "algorithms/AlgorithmFactory.hpp"
+        -:   40:
+        -:   41:// ==========================
+        -:   42:// Request Parsing
+        -:   43:// ==========================
+        -:   44:
+        -:   45:/**
+        -:   46: * @struct ParsedRequest
+        -:   47: * @brief Represents a parsed client request in memory.
+        -:   48: *
+        -:   49: * Fields:
+        -:   50: * - kind: request type (RANDOM or MANUAL)
+        -:   51: * - v: number of vertices
+        -:   52: * - e: number of edges
+        -:   53: * - s: RNG seed (only valid for RANDOM)
+        -:   54: * - d: directed flag
+        -:   55: * - edges: list of (src,dest) pairs when kind==MANUAL
+        -:   56: */
+        -:   57:struct ParsedRequest
+        -:   58:{
+        -:   59:    enum Kind
+        -:   60:    {
+        -:   61:        RANDOM,
+        -:   62:        MANUAL
+        -:   63:    } kind;
+        -:   64:
+        -:   65:    int v{};                                ///< vertices
+        -:   66:    int e{};                                ///< edges
+        -:   67:    int s{};                                ///< seed (FOR RANDOM)
+        -:   68:    bool d{};                               ///< for directed or undirected graph
+        -:   69:    std::vector<std::pair<int, int>> edges; ///< for MANUAL
+        -:   70:};
+        -:   71:
+        -:   72:/**
+        -:   73: * @brief Trim leading and trailing whitespace from a string.
+        -:   74: *
+        -:   75: * Removes spaces, tabs, and newline characters from both ends of the input string.
+        -:   76: *
+        -:   77: * @param s Input string.
+        -:   78: * @return Trimmed string.
+        -:   79: */
+       16:   80:static std::string trim(const std::string &s)
+        -:   81:{
+       16:   82:    size_t a = s.find_first_not_of(" \r\n\t");
+       16:   83:    if (a == std::string::npos)
+    #####:   84:        return "";
+       16:   85:    size_t b = s.find_last_not_of(" \r\n\t");
+       16:   86:    return s.substr(a, b - a + 1);
+        -:   87:}
+        -:   88:
+        -:   89:/**
+        -:   90: * @brief Parse a textual request received from the client.
+        -:   91: *
+        -:   92: * Supported formats:
+        -:   93: * - RANDOM <vertices> <edges> <seed> [directed]
+        -:   94: * - MANUAL <vertices> <edges> [directed]\n<edge lines...>
+        -:   95: *
+        -:   96: * On success, returns a ParsedRequest. On failure, returns std::nullopt and sets `err`.
+        -:   97: *
+        -:   98: * @param text Raw input text from the client (can be pre-trimmed).
+        -:   99: * @param err Output parameter populated with an error message on failure.
+        -:  100: * @return std::optional<ParsedRequest>
+        -:  101: */
+       16:  102:static std::optional<ParsedRequest> parse_request(const std::string &text, std::string &err)
+        -:  103:{
+       16:  104:    std::istringstream in(text);
+       16:  105:    std::string tag;
+       16:  106:    if (!(in >> tag))
+        -:  107:    {
+    #####:  108:        err = "Empty request";
+    #####:  109:        return std::nullopt;
+        -:  110:    }
+        -:  111:
+       16:  112:    if (tag == "RANDOM")
+        -:  113:    {
+        4:  114:        ParsedRequest r;
+        4:  115:        r.kind = ParsedRequest::RANDOM;
+        -:  116:
+        4:  117:        if (!(in >> r.v >> r.e >> r.s))
+        -:  118:        {
+    #####:  119:            err = "Usage: RANDOM <vertices> <edges> <seed> [directed]\n";
+    #####:  120:            return std::nullopt;
+        -:  121:        }
+        -:  122:
+        -:  123:        int dirFlag;
+        4:  124:        if (in >> dirFlag)
+        -:  125:        {
+        4:  126:            r.d = (dirFlag != 0);
+        -:  127:        }
+        -:  128:
+        4:  129:        if (r.v <= 0 || r.e < 0)
+        -:  130:        {
+        1:  131:            err = " parameters not actual or positive numbers.";
+        1:  132:            return std::nullopt;
+        -:  133:        }
+        3:  134:        return r;
+        4:  135:    }
+        -:  136:
+       12:  137:    else if (tag == "MANUAL")
+        -:  138:    {
+       12:  139:        ParsedRequest r;
+       12:  140:        r.kind = ParsedRequest::MANUAL;
+       12:  141:        if (!(in >> r.v >> r.e))
+        -:  142:        {
+        -:  143:            err = "Usage: MANUAL <vertices> <edges> [directed]\n"
+    #####:  144:                  "<edge_1_src> <edge_1_dest> [weight_1]  ... <edge_N_src> <edge_N_dest> [weight_N]\n";
+    #####:  145:            return std::nullopt;
+        -:  146:        }
+        -:  147:
+        -:  148:        int dirFlag;
+       12:  149:        if (in >> dirFlag)
+        -:  150:        {
+       12:  151:            r.d = (dirFlag != 0);
+        -:  152:        }
+        -:  153:
+       12:  154:        if (r.v <= 0 || r.e < 0)
+        -:  155:        {
+    #####:  156:            err = "Invalid vertices or edges\n";
+    #####:  157:            return std::nullopt;
+        -:  158:        }
+        -:  159:
+       12:  160:        r.edges.reserve((size_t)r.e);
+       37:  161:        for (int i = 0; i < r.e; ++i)
+        -:  162:        {
+        -:  163:            int src, dest;
+       27:  164:            if (!(in >> src >> dest))
+        -:  165:            {
+        1:  166:                err = "Not enough edges provided\n";
+        2:  167:                return std::nullopt;
+        -:  168:            }
+       26:  169:            if (src < 0 || src >= r.v || dest < 0 || dest >= r.v)
+        -:  170:            {
+        1:  171:                err = "Edge vertices out of range\n";
+        1:  172:                return std::nullopt;
+        -:  173:            }
+       25:  174:            r.edges.emplace_back(src, dest);
+        -:  175:        }
+       10:  176:        return r;
+       12:  177:    }
+        -:  178:    // else
+    #####:  179:    err = "Unknown request type\n";
+    #####:  180:    return std::nullopt;
+       16:  181:}
+        -:  182:
+        -:  183:/**
+        -:  184: * @brief Construct a Graph object from an explicit list of edges.
+        -:  185: *
+        -:  186: * Creates a graph using the provided vertices and edges, with an option to specify
+        -:  187: * whether the graph is directed.
+        -:  188: *
+        -:  189: * @param n Number of vertices.
+        -:  190: * @param edges Vector of (src, dest) pairs.
+        -:  191: * @param directed Whether the graph is directed.
+        -:  192: * @return Graph::Graph instance owning the constructed adjacency lists.
+        -:  193: */
+       10:  194:static Graph::Graph build_graph_from_edges(int n, const std::vector<std::pair<int, int>> &edges, bool directed = false)
+        -:  195:{
+       10:  196:    Graph::Graph g(n, directed);
+       32:  197:    for (auto [u, v] : edges)
+       24:  198:        g.addEdge(u, v);
+        8:  199:    return g;
+        2:  200:}
+        -:  201:
+        -:  202:/**
+        -:  203: * @brief Build a random graph with the specified parameters.
+        -:  204: *
+        -:  205: * Uses std::mt19937 seeded with `seed` and uniformly selects vertex pairs.
+        -:  206: * Throws std::invalid_argument on invalid parameters.
+        -:  207: *
+        -:  208: * @param vertices Number of vertices.
+        -:  209: * @param edges Number of edges to add (duplicates/self-loops avoided).
+        -:  210: * @param seed RNG seed.
+        -:  211: * @param directed Whether the graph is directed.
+        -:  212: * @return Graph::Graph constructed graph.
+        -:  213: */
+        3:  214:static Graph::Graph build_random_graph(int vertices, int edges, int seed, bool directed)
+        -:  215:{
+        3:  216:    if (vertices <= 0 || edges < 0)
+    #####:  217:        throw std::invalid_argument("Invalid vertices or edges");
+        -:  218:
+        3:  219:    int maxEdges = directed
+        3:  220:                       ? vertices * (vertices - 1)      // directed graph
+        1:  221:                       : vertices * (vertices - 1) / 2; // undirected graph
+        -:  222:
+        3:  223:    if (edges > maxEdges)
+        1:  224:        throw std::invalid_argument("Too many edges for the given number of vertices");
+        -:  225:
+        -:  226:    // Create a graph with x vertices as input
+        2:  227:    Graph::Graph g(vertices, directed);
+        -:  228:
+        -:  229:    // set random values:
+        -:  230:    //  Initialize random number generator with the user-provided seed
+        2:  231:    std::mt19937 rng(seed);
+        -:  232:    // Create a uniform distribution over [0, vertices-1] for selecting random vertices
+        2:  233:    std::uniform_int_distribution<int> dist(0, vertices - 1);
+        -:  234:
+        -:  235:    // add edges within the uniform range
+        2:  236:    int added = 0;
+       28:  237:    while (added < edges)
+        -:  238:    {
+       24:  239:        int u = dist(rng);
+       24:  240:        int v = dist(rng);
+       24:  241:        if (u != v && !g.hasEdge(u, v))
+        -:  242:        {
+       14:  243:            g.addEdge(u, v);
+       14:  244:            ++added;
+        -:  245:        }
+        -:  246:    }
+        -:  247:
+        4:  248:    return g;
+    =====:  249:}
+        -:  250:
+        -:  251:// ==========================
+        -:  252:// Networking helpers
+        -:  253:// ==========================
+        -:  254:
+        -:  255:/**
+        -:  256: * @brief Receive data from a socket until the client shuts down the write side or a terminator is seen.
+        -:  257: *
+        -:  258: * Appends received bytes to `out` and stops when a double newline terminator ("\n\n" or "\r\n\r\n")
+        -:  259: * is detected or when recv returns 0. On socket error, returns -1.
+        -:  260: *
+        -:  261: * @param fd Socket file descriptor.
+        -:  262: * @param out Output string to append received bytes to.
+        -:  263: * @return Total number of bytes received, or -1 on error.
+        -:  264: */
+       16:  265:static ssize_t recv_all(int fd, std::string &out)
+        -:  266:{
+        -:  267:    char buf[4096];
+       16:  268:    ssize_t total = 0;
+        -:  269:    ssize_t n;
+       20:  270:    while ((n = ::recv(fd, buf, sizeof(buf), 0)) > 0)
+        -:  271:    {
+       16:  272:        out.append(buf, buf + n);
+       16:  273:        total += n;
+       16:  274:        if (out.size() >= 2 && (out.rfind("\n\n") == out.size() - 2 || out.rfind("\r\n\r\n") == out.size() - 4))
+       12:  275:            break;
+        -:  276:    }
+      32*:  277:    return (n < 0 && errno != 0) ? -1 : total;
+        -:  278:}
+        -:  279:
+        -:  280:/**
+        -:  281: * @brief Send the full contents of a string over a blocking socket.
+        -:  282: *
+        -:  283: * Retries until all bytes are sent or an error occurs.
+        -:  284: *
+        -:  285: * @param fd Socket file descriptor.
+        -:  286: * @param s Data to send.
+        -:  287: * @return true on success, false on error.
+        -:  288: */
+       16:  289:static bool send_all(int fd, const std::string &s)
+        -:  290:{
+       16:  291:    size_t sent = 0;
+       16:  292:    const char *p = s.c_str();
+       16:  293:    size_t left = s.size();
+       32:  294:    while (left > 0)
+        -:  295:    {
+       16:  296:        ssize_t n = ::send(fd, p + sent, left, 0);
+       16:  297:        if (n <= 0)
+    #####:  298:            return false;
+       16:  299:        sent += (size_t)n;
+       16:  300:        left -= (size_t)n;
+        -:  301:    }
+       16:  302:    return true;
+        -:  303:}
+        -:  304:
+        -:  305:// ======================
+        -:  306:// Bounded thread-safe queue (backpressure)
+        -:  307:// ======================
+        -:  308:
+        -:  309:/**
+        -:  310: * @tparam T payload type passed between adjacent pipeline stages.
+        -:  311: *
+        -:  312: * A minimal bounded MPMC queue implemented with std::mutex + condition_variables.
+        -:  313: * The capacity provides *backpressure*: when a downstream stage is slower,
+        -:  314: * upstream producers will block in push(), preventing unbounded memory growth.
+        -:  315: *
+        -:  316: * Close semantics:
+        -:  317: *  - close(): waking all blocked threads and making future push/pop fail fast.
+        -:  318: *  - pop(): returns false when the queue is closed *and* empty -> stage should exit.
+        -:  319: *  - push(): returns false when the queue has been closed -> producer should drop/cleanup.
+        -:  320: *
+        -:  321: * Note: This is intentionally simple and portable. If you need higher throughput,
+        -:  322: * replace with a lock-free MPMC or a library queue keeping the same interface.
+        -:  323: */
+        -:  324:template <typename T>
+        -:  325:class BoundedQueue
+        -:  326:{
+        -:  327:private:
+        -:  328:    std::mutex m_;
+        -:  329:    std::condition_variable cv_not_full_, cv_not_empty_;
+        -:  330:    std::queue<T> q_;
+        -:  331:    const size_t cap_;
+        -:  332:    bool closed_ = false;
+        -:  333:
+        -:  334:public:
+        8:  335:    explicit BoundedQueue(size_t cap) : cap_(cap) {}
+------------------
+_ZN12BoundedQueueI3JobEC2Em:
+        5:  335:    explicit BoundedQueue(size_t cap) : cap_(cap) {}
+------------------
+_ZN12BoundedQueueI3ReqEC2Em:
+        1:  335:    explicit BoundedQueue(size_t cap) : cap_(cap) {}
+------------------
+_ZN12BoundedQueueI7RecvBufEC2Em:
+        1:  335:    explicit BoundedQueue(size_t cap) : cap_(cap) {}
+------------------
+_ZN12BoundedQueueI4ConnEC2Em:
+        1:  335:    explicit BoundedQueue(size_t cap) : cap_(cap) {}
+------------------
+        -:  336:
+        -:  337:    /**
+        -:  338:     * @brief Enqueue a value, blocking when the queue is full.
+        -:  339:     * @return false if the queue is closed (value not enqueued).
+        -:  340:     */
+       95:  341:    bool push(T v)
+        -:  342:    {
+       95:  343:        std::unique_lock<std::mutex> lk(m_);
+      190:  344:        cv_not_full_.wait(lk, [&]
+      95*:  345:                          { return q_.size() < cap_ || closed_; });
+       95:  346:        if (closed_)
+    #####:  347:            return false;
+       95:  348:        q_.push(std::move(v));
+       95:  349:        cv_not_empty_.notify_one();
+       95:  350:        return true;
+       95:  351:    }
+------------------
+_ZN12BoundedQueueI3JobE4pushES0_:
+       50:  341:    bool push(T v)
+        -:  342:    {
+       50:  343:        std::unique_lock<std::mutex> lk(m_);
+       50:  344:        cv_not_full_.wait(lk, [&]
+        -:  345:                          { return q_.size() < cap_ || closed_; });
+       50:  346:        if (closed_)
+    #####:  347:            return false;
+       50:  348:        q_.push(std::move(v));
+       50:  349:        cv_not_empty_.notify_one();
+       50:  350:        return true;
+       50:  351:    }
+------------------
+_ZN12BoundedQueueI3ReqE4pushES0_:
+       13:  341:    bool push(T v)
+        -:  342:    {
+       13:  343:        std::unique_lock<std::mutex> lk(m_);
+       13:  344:        cv_not_full_.wait(lk, [&]
+        -:  345:                          { return q_.size() < cap_ || closed_; });
+       13:  346:        if (closed_)
+    #####:  347:            return false;
+       13:  348:        q_.push(std::move(v));
+       13:  349:        cv_not_empty_.notify_one();
+       13:  350:        return true;
+       13:  351:    }
+------------------
+_ZN12BoundedQueueI7RecvBufE4pushES0_:
+       16:  341:    bool push(T v)
+        -:  342:    {
+       16:  343:        std::unique_lock<std::mutex> lk(m_);
+       16:  344:        cv_not_full_.wait(lk, [&]
+        -:  345:                          { return q_.size() < cap_ || closed_; });
+       16:  346:        if (closed_)
+    #####:  347:            return false;
+       16:  348:        q_.push(std::move(v));
+       16:  349:        cv_not_empty_.notify_one();
+       16:  350:        return true;
+       16:  351:    }
+------------------
+_ZN12BoundedQueueI4ConnE4pushES0_:
+       16:  341:    bool push(T v)
+        -:  342:    {
+       16:  343:        std::unique_lock<std::mutex> lk(m_);
+       16:  344:        cv_not_full_.wait(lk, [&]
+        -:  345:                          { return q_.size() < cap_ || closed_; });
+       16:  346:        if (closed_)
+    #####:  347:            return false;
+       16:  348:        q_.push(std::move(v));
+       16:  349:        cv_not_empty_.notify_one();
+       16:  350:        return true;
+       16:  351:    }
+------------------
+        -:  352:
+        -:  353:    /**
+        -:  354:     * @brief Dequeue a value, blocking when the queue is empty.
+        -:  355:     * @return false if the queue is closed and empty (producer finished)
+        -:  356:     */
+      103:  357:    bool pop(T &out)
+        -:  358:    {
+      103:  359:        std::unique_lock<std::mutex> lk(m_);
+      301:  360:        cv_not_empty_.wait(lk, [&]
+      198:  361:                           { return !q_.empty() || closed_; });
+      103:  362:        if (q_.empty())
+        8:  363:            return false;
+       95:  364:        out = std::move(q_.front());
+       95:  365:        q_.pop();
+       95:  366:        cv_not_full_.notify_one();
+       95:  367:        return true;
+      103:  368:    }
+------------------
+_ZN12BoundedQueueI3JobE3popERS0_:
+       55:  357:    bool pop(T &out)
+        -:  358:    {
+       55:  359:        std::unique_lock<std::mutex> lk(m_);
+       55:  360:        cv_not_empty_.wait(lk, [&]
+        -:  361:                           { return !q_.empty() || closed_; });
+       55:  362:        if (q_.empty())
+        5:  363:            return false;
+       50:  364:        out = std::move(q_.front());
+       50:  365:        q_.pop();
+       50:  366:        cv_not_full_.notify_one();
+       50:  367:        return true;
+       55:  368:    }
+------------------
+_ZN12BoundedQueueI3ReqE3popERS0_:
+       14:  357:    bool pop(T &out)
+        -:  358:    {
+       14:  359:        std::unique_lock<std::mutex> lk(m_);
+       14:  360:        cv_not_empty_.wait(lk, [&]
+        -:  361:                           { return !q_.empty() || closed_; });
+       14:  362:        if (q_.empty())
+        1:  363:            return false;
+       13:  364:        out = std::move(q_.front());
+       13:  365:        q_.pop();
+       13:  366:        cv_not_full_.notify_one();
+       13:  367:        return true;
+       14:  368:    }
+------------------
+_ZN12BoundedQueueI7RecvBufE3popERS0_:
+       17:  357:    bool pop(T &out)
+        -:  358:    {
+       17:  359:        std::unique_lock<std::mutex> lk(m_);
+       17:  360:        cv_not_empty_.wait(lk, [&]
+        -:  361:                           { return !q_.empty() || closed_; });
+       17:  362:        if (q_.empty())
+        1:  363:            return false;
+       16:  364:        out = std::move(q_.front());
+       16:  365:        q_.pop();
+       16:  366:        cv_not_full_.notify_one();
+       16:  367:        return true;
+       17:  368:    }
+------------------
+_ZN12BoundedQueueI4ConnE3popERS0_:
+       17:  357:    bool pop(T &out)
+        -:  358:    {
+       17:  359:        std::unique_lock<std::mutex> lk(m_);
+       17:  360:        cv_not_empty_.wait(lk, [&]
+        -:  361:                           { return !q_.empty() || closed_; });
+       17:  362:        if (q_.empty())
+        1:  363:            return false;
+       16:  364:        out = std::move(q_.front());
+       16:  365:        q_.pop();
+       16:  366:        cv_not_full_.notify_one();
+       16:  367:        return true;
+       17:  368:    }
+------------------
+        -:  369:
+        -:  370:    /**
+        -:  371:     * @brief Close the queue, waking all blocked threads.
+        -:  372:     *
+        -:  373:     * After close(), push() and pop() will return false immediately.
+        -:  374:     * pop() will return false only when the queue is both closed and empty.
+        -:  375:     */
+        8:  376:    void close()
+        -:  377:    {
+        8:  378:        std::lock_guard<std::mutex> lk(m_);
+        8:  379:        closed_ = true;
+        8:  380:        cv_not_empty_.notify_all();
+        8:  381:        cv_not_full_.notify_all();
+        8:  382:    }
+------------------
+_ZN12BoundedQueueI3JobE5closeEv:
+        5:  376:    void close()
+        -:  377:    {
+        5:  378:        std::lock_guard<std::mutex> lk(m_);
+        5:  379:        closed_ = true;
+        5:  380:        cv_not_empty_.notify_all();
+        5:  381:        cv_not_full_.notify_all();
+        5:  382:    }
+------------------
+_ZN12BoundedQueueI3ReqE5closeEv:
+        1:  376:    void close()
+        -:  377:    {
+        1:  378:        std::lock_guard<std::mutex> lk(m_);
+        1:  379:        closed_ = true;
+        1:  380:        cv_not_empty_.notify_all();
+        1:  381:        cv_not_full_.notify_all();
+        1:  382:    }
+------------------
+_ZN12BoundedQueueI7RecvBufE5closeEv:
+        1:  376:    void close()
+        -:  377:    {
+        1:  378:        std::lock_guard<std::mutex> lk(m_);
+        1:  379:        closed_ = true;
+        1:  380:        cv_not_empty_.notify_all();
+        1:  381:        cv_not_full_.notify_all();
+        1:  382:    }
+------------------
+_ZN12BoundedQueueI4ConnE5closeEv:
+        1:  376:    void close()
+        -:  377:    {
+        1:  378:        std::lock_guard<std::mutex> lk(m_);
+        1:  379:        closed_ = true;
+        1:  380:        cv_not_empty_.notify_all();
+        1:  381:        cv_not_full_.notify_all();
+        1:  382:    }
+------------------
+        -:  383:};
+        -:  384:
+        -:  385:// ===== Globals =====
+        -:  386:
+        -:  387:// Used for graceful shutdown on SIGINT
+        -:  388:static std::atomic<bool> g_stop{false};
+        -:  389:// Listening socket file descriptor
+        -:  390:static int sfd = -1;
+        -:  391:
+        -:  392:// ======================
+        -:  393:// Pipeline payload types
+        -:  394:// ======================
+        -:  395:
+        -:  396:// Payloads passed between adjacent pipeline stages
+        -:  397:struct Conn
+        -:  398:{
+        -:  399:    int fd;
+        -:  400:};
+        -:  401:
+        -:  402:// Received raw request buffer
+        -:  403:struct RecvBuf
+        -:  404:{
+        -:  405:    int fd;
+        -:  406:    std::string raw;
+        -:  407:};
+        -:  408:
+        -:  409:// Parsed request
+        -:  410:struct Req
+        -:  411:{
+        -:  412:    int fd;
+        -:  413:    ParsedRequest pr;
+        -:  414:};
+        -:  415:
+        -:  416:/**
+        -:  417: * @brief Job representing a graph processing task for a client.
+        -:  418: *
+        -:  419: * Contains the client socket file descriptor, a shared pointer to the graph,
+        -:  420: * and an output string for accumulating results.
+        -:  421: */
+        -:  422:struct Job
+        -:  423:{
+        -:  424:    int fd;
+        -:  425:    std::shared_ptr<const Graph::Graph> g;
+        -:  426:    std::string out;
+        -:  427:};
+        -:  428:
+        -:  429:// ====================
+        -:  430:// Pipeline stages
+        -:  431:// ====================
+        -:  432:
+        -:  433:/**
+        -:  434: * @brief Accept new client connections.
+        -:  435: *
+        -:  436: * Blocks in accept() until a client connects. On success, the connection
+        -:  437: * is wrapped in a Conn and pushed to the recv stage. On SIGINT, the
+        -:  438: * listening socket is shut down, unblocking accept() so this loop can exit.
+        -:  439: *
+        -:  440: * @param sfd  Listening socket file descriptor.
+        -:  441: * @param qA2R Queue for accepted connections (Conn).
+        -:  442: */
+        1:  443:static void stage_accept(int sfd, BoundedQueue<Conn> &qA2R)
+        -:  444:{
+       17:  445:    while (!g_stop.load())
+        -:  446:    {
+       17:  447:        sockaddr_in caddr{};
+       17:  448:        socklen_t clen = sizeof(caddr);
+       17:  449:        int cfd = ::accept(sfd, (sockaddr *)&caddr, &clen);
+      17*:  450:        if (cfd < 0)
+        -:  451:        {
+        1:  452:            if (g_stop.load())
+        1:  453:                break;
+    #####:  454:            continue;
+        -:  455:        }
+       16:  456:        if (!qA2R.push(Conn{cfd}))
+        -:  457:        {
+    #####:  458:            ::close(cfd); // queue closed; refuse new client
+    #####:  459:            break;
+        -:  460:        }
+        -:  461:    }
+        1:  462:}
+        -:  463:
+        -:  464:/**
+        -:  465: * @brief Receive raw request text from a client socket.
+        -:  466: *
+        -:  467: * Reads until a terminator ("\n\n" or "\r\n\r\n") or EOF. Produces a RecvBuf
+        -:  468: * containing the client fd and the request string. On socket error, the
+        -:  469: * connection is closed. If the downstream queue is closed, the connection is dropped.
+        -:  470: *
+        -:  471: * @param qA2R Input queue of accepted connections.
+        -:  472: * @param qR2P Output queue of raw request buffers.
+        -:  473: */
+        1:  474:static void stage_recv(BoundedQueue<Conn> &qA2R, BoundedQueue<RecvBuf> &qR2P)
+        -:  475:{
+        -:  476:    Conn c;
+       17:  477:    while (qA2R.pop(c))
+        -:  478:    {
+       16:  479:        std::string raw;
+      16*:  480:        if (recv_all(c.fd, raw) < 0)
+        -:  481:        {
+    #####:  482:            ::close(c.fd);
+    #####:  483:            continue;
+        -:  484:        }
+       16:  485:        if (!qR2P.push(RecvBuf{c.fd, std::move(raw)}))
+        -:  486:        {
+    #####:  487:            ::close(c.fd);
+        -:  488:        }
+       16:  489:    }
+        1:  490:}
+        -:  491:
+        -:  492:/**
+        -:  493: * @brief Parse a raw request string into a structured Req.
+        -:  494: *
+        -:  495: * On success, produces a Req object and pushes it to the build stage.
+        -:  496: * On parse error, sends "ERROR: ..." back to the client and closes the socket.
+        -:  497: *
+        -:  498: * @param qR2P Input queue of raw request buffers.
+        -:  499: * @param qP2B Output queue of parsed requests.
+        -:  500: */
+        1:  501:static void stage_parse(BoundedQueue<RecvBuf> &qR2P, BoundedQueue<Req> &qP2B)
+        -:  502:{
+        1:  503:    RecvBuf rb;
+       17:  504:    while (qR2P.pop(rb))
+        -:  505:    {
+       16:  506:        std::string err;
+       16:  507:        auto pr = parse_request(trim(rb.raw), err);
+       16:  508:        if (!pr)
+        -:  509:        {
+        3:  510:            send_all(rb.fd, "ERROR: " + err + "\n");
+        3:  511:            ::close(rb.fd);
+        3:  512:            continue;
+        -:  513:        }
+       13:  514:        qP2B.push(Req{rb.fd, *pr});
+       19:  515:    }
+        1:  516:}
+        -:  517:
+        -:  518:/**
+        -:  519: * @brief Build a Graph from the parsed request.
+        -:  520: *
+        -:  521: * For each Req:
+        -:  522: *  - Builds a Graph (random or manual).
+        -:  523: *  - Creates a Job containing the client fd, shared Graph pointer, and initial output string.
+        -:  524: *  - Pushes the Job to the first algorithm stage.
+        -:  525: *
+        -:  526: * On error, sends "ERROR: ..." back to the client and closes the socket.
+        -:  527: *
+        -:  528: * @param qP2B Input queue of parsed requests.
+        -:  529: * @param qB2A1 Output queue of Jobs for the first algorithm stage.
+        -:  530: */
+        1:  531:static void stage_build(BoundedQueue<Req> &qP2B,
+        -:  532:                        BoundedQueue<Job> &qB2A1) // Build -> Algo1
+        -:  533:{
+        1:  534:    Req rq;
+       14:  535:    while (qP2B.pop(rq))
+        -:  536:    {
+        -:  537:        try
+        -:  538:        {
+        -:  539:            auto gptr = std::make_shared<const Graph::Graph>(
+       13:  540:                (rq.pr.kind == ParsedRequest::RANDOM)
+       25:  541:                    ? build_random_graph(rq.pr.v, rq.pr.e, rq.pr.s, rq.pr.d)
+       12:  542:                    : build_graph_from_edges(rq.pr.v, rq.pr.edges, rq.pr.d));
+        -:  543:
+       10:  544:            Job job;
+       10:  545:            job.fd = rq.fd;
+       10:  546:            job.g = gptr;
+       10:  547:            std::ostringstream oss;
+        -:  548:            oss << "Graph:\n"
+       10:  549:                << gptr->getGraph() << "\nResults:\n";
+       10:  550:            job.out = oss.str();
+        -:  551:
+       10:  552:            qB2A1.push(std::move(job));
+       10:  553:        }
+        3:  554:        catch (const std::exception &ex)
+        -:  555:        {
+        6:  556:            send_all(rq.fd, std::string("ERROR: ") + ex.what() + "\n");
+        3:  557:            ::close(rq.fd);
+        3:  558:        }
+        -:  559:    }
+        1:  560:}
+        -:  561:
+        -:  562:/* @brief Run a single algorithm on a shared Graph.
+        -:  563: *
+        -:  564: * Executes one algorithm (given by alg_id) on the shared Graph. Appends
+        -:  565: * results into the Job's output string. Pushes the updated Job to the next stage.
+        -:  566: *
+        -:  567: * @param qin   Input queue of Jobs.
+        -:  568: * @param qout  Output queue of Jobs for the next algorithm stage or send stage.
+        -:  569: * @param alg_id Algorithm ID to run.
+        -:  570: * @param requires_directed Whether the algorithm requires a directed graph.
+        -:  571: */
+        4:  572:static void stage_algo_generic(BoundedQueue<Job> &qin,
+        -:  573:                               BoundedQueue<Job> &qout,
+        -:  574:                               int alg_id,
+        -:  575:                               bool requires_directed)
+        -:  576:{
+        4:  577:    Job job;
+       44:  578:    while (qin.pop(job))
+        -:  579:    {
+        -:  580:        try
+        -:  581:        {
+       40:  582:            if (requires_directed && !job.g->isDirected())
+        -:  583:            {
+       28:  584:                job.out += "Algorithm " + std::to_string(alg_id) +
+       14:  585:                           ": Requires directed graph\n\n";
+        -:  586:            }
+        -:  587:            else
+        -:  588:            {
+       26:  589:                std::unique_ptr<Algorithm> alg(AlgorithmFactory::create(alg_id));
+       26:  590:                if (alg)
+        -:  591:                {
+       26:  592:                    job.out += alg->run(*job.g) + "\n\n";
+        -:  593:                }
+       26:  594:            }
+        -:  595:        }
+    =====:  596:        catch (const std::exception &ex)
+        -:  597:        {
+    =====:  598:            job.out += "Algorithm " + std::to_string(alg_id) +
+    =====:  599:                       " Error: " + ex.what() + "\n\n";
+    =====:  600:        }
+       40:  601:        qout.push(std::move(job));
+        -:  602:    }
+        4:  603:}
+        -:  604:
+        -:  605:/**
+        -:  606: * @brief Send the final results back to the client and close the socket.
+        -:  607: *
+        -:  608: * @param qA4S Input queue of completed Jobs ready to send.
+        -:  609: */
+        1:  610:static void stage_send(BoundedQueue<Job> &qA4S)
+        -:  611:{
+        1:  612:    Job job;
+       11:  613:    while (qA4S.pop(job))
+        -:  614:    {
+       10:  615:        send_all(job.fd, job.out);
+       10:  616:        ::close(job.fd);
+        -:  617:    }
+        1:  618:}
+        -:  619:
+        -:  620:// ==========================
+        -:  621:// Main
+        -:  622:// ==========================
+        -:  623:
+        -:  624:/**
+        -:  625: * @brief Signal handler for SIGINT to initiate graceful shutdown.
+        -:  626: *
+        -:  627: * Sets the global stop flag and shuts down the listening socket to
+        -:  628: * interrupt any blocking accept() call.
+        -:  629: *
+        -:  630: */
+        1:  631:static void on_sigint(int)
+        -:  632:{
+        1:  633:    g_stop.store(true);
+        -:  634:    // Interrupt the accept() call by shutting down the socket
+        1:  635:    if (sfd != -1)
+        -:  636:    {
+        1:  637:        ::shutdown(sfd, SHUT_RDWR);
+        -:  638:    }
+        1:  639:}
+        -:  640:
+        -:  641:/**
+        -:  642: * @brief Server entry point.
+        -:  643: *
+        -:  644: * Command-line options:
+        -:  645: * -t <threads> Number of worker threads (default 10).
+        -:  646: *
+        -:  647: * Initializes the server, creates worker threads, and listens for incoming
+        -:  648: * connections. Implements graceful shutdown on SIGINT.
+        -:  649: *
+        -:  650: * @param argc Argument count.
+        -:  651: * @param argv Argument vector.
+        -:  652: * @return exit status.
+        -:  653: */
+        1:  654:int main(int argc, char **argv)
+        -:  655:{
+        1:  656:    int port = 8080;
+        1:  657:    int num_threads = 10; // default number of worker threads
+        -:  658:    int opt;
+        -:  659:
+        -:  660:    // Allow overriding the number of worker threads via a command-line option
+        2:  661:    while ((opt = ::getopt(argc, argv, "t:")) != -1)
+        -:  662:    {
+        1:  663:        switch (opt)
+        -:  664:        {
+        1:  665:        case 't':
+        1:  666:            num_threads = std::atoi(optarg);
+        1:  667:            if (num_threads <= 0)
+        -:  668:            {
+    #####:  669:                std::cerr << "Number of threads must be positive\n";
+    #####:  670:                return 1;
+        -:  671:            }
+        1:  672:            break;
+    #####:  673:        default:
+    #####:  674:            std::cerr << "Usage: " << argv[0] << " -t <threads>\n";
+    #####:  675:            return 1;
+        -:  676:        }
+        -:  677:    }
+        -:  678:
+        1:  679:    std::signal(SIGINT, on_sigint);
+        -:  680:
+        1:  681:    sfd = ::socket(AF_INET, SOCK_STREAM, 0);
+        1:  682:    if (sfd < 0)
+        -:  683:    {
+    #####:  684:        perror("socket");
+    #####:  685:        return 1;
+        -:  686:    }
+        -:  687:
+        1:  688:    int yes = 1;
+        1:  689:    setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        -:  690:
+        1:  691:    sockaddr_in addr{};
+        1:  692:    addr.sin_family = AF_INET;
+        1:  693:    addr.sin_port = htons(port);
+        1:  694:    addr.sin_addr.s_addr = INADDR_ANY;
+        1:  695:    if (::bind(sfd, (sockaddr *)&addr, sizeof(addr)) < 0)
+        -:  696:    {
+    #####:  697:        perror("bind");
+    #####:  698:        return 1;
+        -:  699:    }
+        1:  700:    if (::listen(sfd, 16) < 0)
+        -:  701:    {
+    #####:  702:        perror("listen");
+    #####:  703:        return 1;
+        -:  704:    }
+        -:  705:
+        -:  706:    // ==========================
+        -:  707:    // Pipeline queues and threads
+        -:  708:    // ==========================
+        -:  709:
+        -:  710:    // ---- Pipeline queues between stages ----
+        -:  711:
+        -:  712:    // Sizes chosen to provide some buffering while limiting memory usage
+        2:  713:    BoundedQueue<Conn> qA2R(std::max(64, 16 * num_threads));
+        2:  714:    BoundedQueue<RecvBuf> qR2P(std::max(64, 16 * num_threads));
+        2:  715:    BoundedQueue<Req> qP2B(std::max(64, 8 * num_threads));
+        -:  716:
+        2:  717:    BoundedQueue<Job> qB2A1(std::max(64, 4 * num_threads));
+        2:  718:    BoundedQueue<Job> qA1A2(std::max(64, 4 * num_threads));
+        2:  719:    BoundedQueue<Job> qA2A3(std::max(64, 4 * num_threads));
+        2:  720:    BoundedQueue<Job> qA3A4(std::max(64, 4 * num_threads));
+        -:  721:
+        2:  722:    BoundedQueue<Job> qA4S(std::max(64, 4 * num_threads));
+        -:  723:
+        -:  724:
+        -:  725:    // ---- Launch stages ----
+    #####:  726:    std::thread acceptor([&]
+        3:  727:                         { stage_accept(sfd, qA2R); });
+        -:  728:
+    #####:  729:    std::thread recv_thread([&]
+        3:  730:                            { stage_recv(qA2R, qR2P); });
+        -:  731:
+    #####:  732:    std::thread parse_thread([&]
+        3:  733:                             { stage_parse(qR2P, qP2B); });
+        -:  734:
+    #####:  735:    std::thread build_thread([&]
+        3:  736:                             { stage_build(qP2B, qB2A1); });
+        -:  737:
+    #####:  738:    std::thread algo1_thread([&]
+        3:  739:                             { stage_algo_generic(qB2A1, qA1A2, 1, false); });
+        -:  740:
+    #####:  741:    std::thread algo2_thread([&]
+        3:  742:                             { stage_algo_generic(qA1A2, qA2A3, 2, true); });
+        -:  743:
+    #####:  744:    std::thread algo3_thread([&]
+        3:  745:                             { stage_algo_generic(qA2A3, qA3A4, 3, true); });
+        -:  746:
+    #####:  747:    std::thread algo4_thread([&]
+        3:  748:                             { stage_algo_generic(qA3A4, qA4S, 4, false); });
+        -:  749:
+    #####:  750:    std::thread send_thread([&]
+        2:  751:                            { stage_send(qA4S); });
+        -:  752:
+        1:  753:    std::cout << "[PipelineServer] Listening on port " << port << "\n\n"
+        1:  754:              << "(Ctrl+C to stop)\n";
+        -:  755:
+        -:  756:    // Wait for shutdown signal; pipeline threads handle all work
+       13:  757:    while (!g_stop.load())
+        -:  758:    {
+       12:  759:        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        -:  760:    }
+        -:  761:
+        -:  762:    // ---- Graceful shutdown ----
+        1:  763:    if (sfd != -1)
+        -:  764:    {
+        1:  765:        ::close(sfd);
+        1:  766:        sfd = -1;
+        -:  767:    }
+        1:  768:    qA2R.close();
+        1:  769:    qR2P.close();
+        1:  770:    qP2B.close();
+        1:  771:    qB2A1.close();
+        1:  772:    qA1A2.close();
+        1:  773:    qA2A3.close();
+        1:  774:    qA3A4.close();
+        1:  775:    qA4S.close();
+        -:  776:
+        1:  777:    if (acceptor.joinable())
+        1:  778:        acceptor.join();
+        1:  779:    if (recv_thread.joinable())
+        1:  780:        recv_thread.join();
+        1:  781:    if (parse_thread.joinable())
+        1:  782:        parse_thread.join();
+        1:  783:    if (build_thread.joinable())
+        1:  784:        build_thread.join();
+        1:  785:    if (algo1_thread.joinable())
+        1:  786:        algo1_thread.join();
+        1:  787:    if (algo2_thread.joinable())
+        1:  788:        algo2_thread.join();
+        1:  789:    if (algo3_thread.joinable())
+        1:  790:        algo3_thread.join();
+        1:  791:    if (algo4_thread.joinable())
+        1:  792:        algo4_thread.join();
+        1:  793:    if (send_thread.joinable())
+        1:  794:        send_thread.join();
+        -:  795:
+        1:  796:    std::cout << "[Multithread] Stopped.\n";
+        1:  797:    return 0;
+        -:  798:}

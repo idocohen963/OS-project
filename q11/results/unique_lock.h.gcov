@@ -1,0 +1,251 @@
+        -:    0:Source:/usr/include/c++/13/bits/unique_lock.h
+        -:    1:// std::unique_lock implementation -*- C++ -*-
+        -:    2:
+        -:    3:// Copyright (C) 2008-2023 Free Software Foundation, Inc.
+        -:    4://
+        -:    5:// This file is part of the GNU ISO C++ Library.  This library is free
+        -:    6:// software; you can redistribute it and/or modify it under the
+        -:    7:// terms of the GNU General Public License as published by the
+        -:    8:// Free Software Foundation; either version 3, or (at your option)
+        -:    9:// any later version.
+        -:   10:
+        -:   11:// This library is distributed in the hope that it will be useful,
+        -:   12:// but WITHOUT ANY WARRANTY; without even the implied warranty of
+        -:   13:// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        -:   14:// GNU General Public License for more details.
+        -:   15:
+        -:   16:// Under Section 7 of GPL version 3, you are granted additional
+        -:   17:// permissions described in the GCC Runtime Library Exception, version
+        -:   18:// 3.1, as published by the Free Software Foundation.
+        -:   19:
+        -:   20:// You should have received a copy of the GNU General Public License and
+        -:   21:// a copy of the GCC Runtime Library Exception along with this program;
+        -:   22:// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+        -:   23:// <http://www.gnu.org/licenses/>.
+        -:   24:
+        -:   25:/** @file bits/unique_lock.h
+        -:   26: *  This is an internal header file, included by other library headers.
+        -:   27: *  Do not attempt to use it directly. @headername{mutex}
+        -:   28: */
+        -:   29:
+        -:   30:#ifndef _GLIBCXX_UNIQUE_LOCK_H
+        -:   31:#define _GLIBCXX_UNIQUE_LOCK_H 1
+        -:   32:
+        -:   33:#pragma GCC system_header
+        -:   34:
+        -:   35:#if __cplusplus < 201103L
+        -:   36:# include <bits/c++0x_warning.h>
+        -:   37:#else
+        -:   38:
+        -:   39:#include <bits/chrono.h>
+        -:   40:#include <bits/move.h> // for std::swap
+        -:   41:#include <bits/std_mutex.h> // for std::defer_lock_t
+        -:   42:
+        -:   43:namespace std _GLIBCXX_VISIBILITY(default)
+        -:   44:{
+        -:   45:_GLIBCXX_BEGIN_NAMESPACE_VERSION
+        -:   46:
+        -:   47:  /** @brief A movable scoped lock type.
+        -:   48:   *
+        -:   49:   * A unique_lock controls mutex ownership within a scope. Ownership of the
+        -:   50:   * mutex can be delayed until after construction and can be transferred
+        -:   51:   * to another unique_lock by move construction or move assignment. If a
+        -:   52:   * mutex lock is owned when the destructor runs ownership will be released.
+        -:   53:   *
+        -:   54:   * @headerfile mutex
+        -:   55:   * @ingroup mutexes
+        -:   56:   * @since C++11
+        -:   57:   */
+        -:   58:  template<typename _Mutex>
+        -:   59:    class unique_lock
+        -:   60:    {
+        -:   61:    public:
+        -:   62:      typedef _Mutex mutex_type;
+        -:   63:
+        -:   64:      unique_lock() noexcept
+        -:   65:      : _M_device(0), _M_owns(false)
+        -:   66:      { }
+        -:   67:
+      198:   68:      explicit unique_lock(mutex_type& __m)
+      198:   69:      : _M_device(std::__addressof(__m)), _M_owns(false)
+        -:   70:      {
+      198:   71:	lock();
+      198:   72:	_M_owns = true;
+      198:   73:      }
+        -:   74:
+        -:   75:      unique_lock(mutex_type& __m, defer_lock_t) noexcept
+        -:   76:      : _M_device(std::__addressof(__m)), _M_owns(false)
+        -:   77:      { }
+        -:   78:
+        -:   79:      unique_lock(mutex_type& __m, try_to_lock_t)
+        -:   80:      : _M_device(std::__addressof(__m)), _M_owns(_M_device->try_lock())
+        -:   81:      { }
+        -:   82:
+        -:   83:      unique_lock(mutex_type& __m, adopt_lock_t) noexcept
+        -:   84:      : _M_device(std::__addressof(__m)), _M_owns(true)
+        -:   85:      {
+        -:   86:	// XXX calling thread owns mutex
+        -:   87:      }
+        -:   88:
+        -:   89:      template<typename _Clock, typename _Duration>
+        -:   90:	unique_lock(mutex_type& __m,
+        -:   91:		    const chrono::time_point<_Clock, _Duration>& __atime)
+        -:   92:	: _M_device(std::__addressof(__m)),
+        -:   93:	  _M_owns(_M_device->try_lock_until(__atime))
+        -:   94:	{ }
+        -:   95:
+        -:   96:      template<typename _Rep, typename _Period>
+        -:   97:	unique_lock(mutex_type& __m,
+        -:   98:		    const chrono::duration<_Rep, _Period>& __rtime)
+        -:   99:	: _M_device(std::__addressof(__m)),
+        -:  100:	  _M_owns(_M_device->try_lock_for(__rtime))
+        -:  101:	{ }
+        -:  102:
+      198:  103:      ~unique_lock()
+        -:  104:      {
+      198:  105:	if (_M_owns)
+      198:  106:	  unlock();
+      198:  107:      }
+        -:  108:
+        -:  109:      unique_lock(const unique_lock&) = delete;
+        -:  110:      unique_lock& operator=(const unique_lock&) = delete;
+        -:  111:
+        -:  112:      unique_lock(unique_lock&& __u) noexcept
+        -:  113:      : _M_device(__u._M_device), _M_owns(__u._M_owns)
+        -:  114:      {
+        -:  115:	__u._M_device = 0;
+        -:  116:	__u._M_owns = false;
+        -:  117:      }
+        -:  118:
+        -:  119:      unique_lock& operator=(unique_lock&& __u) noexcept
+        -:  120:      {
+        -:  121:	if(_M_owns)
+        -:  122:	  unlock();
+        -:  123:
+        -:  124:	unique_lock(std::move(__u)).swap(*this);
+        -:  125:
+        -:  126:	__u._M_device = 0;
+        -:  127:	__u._M_owns = false;
+        -:  128:
+        -:  129:	return *this;
+        -:  130:      }
+        -:  131:
+        -:  132:      void
+      198:  133:      lock()
+        -:  134:      {
+      198:  135:	if (!_M_device)
+    #####:  136:	  __throw_system_error(int(errc::operation_not_permitted));
+      198:  137:	else if (_M_owns)
+    #####:  138:	  __throw_system_error(int(errc::resource_deadlock_would_occur));
+        -:  139:	else
+        -:  140:	  {
+      198:  141:	    _M_device->lock();
+      198:  142:	    _M_owns = true;
+        -:  143:	  }
+      198:  144:      }
+        -:  145:
+        -:  146:      _GLIBCXX_NODISCARD
+        -:  147:      bool
+        -:  148:      try_lock()
+        -:  149:      {
+        -:  150:	if (!_M_device)
+        -:  151:	  __throw_system_error(int(errc::operation_not_permitted));
+        -:  152:	else if (_M_owns)
+        -:  153:	  __throw_system_error(int(errc::resource_deadlock_would_occur));
+        -:  154:	else
+        -:  155:	  {
+        -:  156:	    _M_owns = _M_device->try_lock();
+        -:  157:	    return _M_owns;
+        -:  158:	  }
+        -:  159:      }
+        -:  160:
+        -:  161:      template<typename _Clock, typename _Duration>
+        -:  162:	_GLIBCXX_NODISCARD
+        -:  163:	bool
+        -:  164:	try_lock_until(const chrono::time_point<_Clock, _Duration>& __atime)
+        -:  165:	{
+        -:  166:	  if (!_M_device)
+        -:  167:	    __throw_system_error(int(errc::operation_not_permitted));
+        -:  168:	  else if (_M_owns)
+        -:  169:	    __throw_system_error(int(errc::resource_deadlock_would_occur));
+        -:  170:	  else
+        -:  171:	    {
+        -:  172:	      _M_owns = _M_device->try_lock_until(__atime);
+        -:  173:	      return _M_owns;
+        -:  174:	    }
+        -:  175:	}
+        -:  176:
+        -:  177:      template<typename _Rep, typename _Period>
+        -:  178:	_GLIBCXX_NODISCARD
+        -:  179:	bool
+        -:  180:	try_lock_for(const chrono::duration<_Rep, _Period>& __rtime)
+        -:  181:	{
+        -:  182:	  if (!_M_device)
+        -:  183:	    __throw_system_error(int(errc::operation_not_permitted));
+        -:  184:	  else if (_M_owns)
+        -:  185:	    __throw_system_error(int(errc::resource_deadlock_would_occur));
+        -:  186:	  else
+        -:  187:	    {
+        -:  188:	      _M_owns = _M_device->try_lock_for(__rtime);
+        -:  189:	      return _M_owns;
+        -:  190:	    }
+        -:  191:	 }
+        -:  192:
+        -:  193:      void
+      198:  194:      unlock()
+        -:  195:      {
+      198:  196:	if (!_M_owns)
+    #####:  197:	  __throw_system_error(int(errc::operation_not_permitted));
+      198:  198:	else if (_M_device)
+        -:  199:	  {
+      198:  200:	    _M_device->unlock();
+      198:  201:	    _M_owns = false;
+        -:  202:	  }
+      198:  203:      }
+        -:  204:
+        -:  205:      void
+        -:  206:      swap(unique_lock& __u) noexcept
+        -:  207:      {
+        -:  208:	std::swap(_M_device, __u._M_device);
+        -:  209:	std::swap(_M_owns, __u._M_owns);
+        -:  210:      }
+        -:  211:
+        -:  212:      mutex_type*
+        -:  213:      release() noexcept
+        -:  214:      {
+        -:  215:	mutex_type* __ret = _M_device;
+        -:  216:	_M_device = 0;
+        -:  217:	_M_owns = false;
+        -:  218:	return __ret;
+        -:  219:      }
+        -:  220:
+        -:  221:      _GLIBCXX_NODISCARD
+        -:  222:      bool
+        -:  223:      owns_lock() const noexcept
+        -:  224:      { return _M_owns; }
+        -:  225:
+        -:  226:      explicit operator bool() const noexcept
+        -:  227:      { return owns_lock(); }
+        -:  228:
+        -:  229:      _GLIBCXX_NODISCARD
+        -:  230:      mutex_type*
+        -:  231:      mutex() const noexcept
+        -:  232:      { return _M_device; }
+        -:  233:
+        -:  234:    private:
+        -:  235:      mutex_type*	_M_device;
+        -:  236:      bool		_M_owns;
+        -:  237:    };
+        -:  238:
+        -:  239:  /// Swap overload for unique_lock objects.
+        -:  240:  /// @relates unique_lock
+        -:  241:  template<typename _Mutex>
+        -:  242:    inline void
+        -:  243:    swap(unique_lock<_Mutex>& __x, unique_lock<_Mutex>& __y) noexcept
+        -:  244:    { __x.swap(__y); }
+        -:  245:
+        -:  246:_GLIBCXX_END_NAMESPACE_VERSION
+        -:  247:} // namespace
+        -:  248:
+        -:  249:#endif // C++11
+        -:  250:#endif // _GLIBCXX_UNIQUE_LOCK_H

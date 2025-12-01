@@ -1,0 +1,754 @@
+        -:    0:Source:/usr/include/c++/13/bits/std_thread.h
+        -:    1:// std::thread declarations -*- C++ -*-
+        -:    2:
+        -:    3:// Copyright (C) 2008-2023 Free Software Foundation, Inc.
+        -:    4://
+        -:    5:// This file is part of the GNU ISO C++ Library.  This library is free
+        -:    6:// software; you can redistribute it and/or modify it under the
+        -:    7:// terms of the GNU General Public License as published by the
+        -:    8:// Free Software Foundation; either version 3, or (at your option)
+        -:    9:// any later version.
+        -:   10:
+        -:   11:// This library is distributed in the hope that it will be useful,
+        -:   12:// but WITHOUT ANY WARRANTY; without even the implied warranty of
+        -:   13:// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        -:   14:// GNU General Public License for more details.
+        -:   15:
+        -:   16:// Under Section 7 of GPL version 3, you are granted additional
+        -:   17:// permissions described in the GCC Runtime Library Exception, version
+        -:   18:// 3.1, as published by the Free Software Foundation.
+        -:   19:
+        -:   20:// You should have received a copy of the GNU General Public License and
+        -:   21:// a copy of the GCC Runtime Library Exception along with this program;
+        -:   22:// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+        -:   23:// <http://www.gnu.org/licenses/>.
+        -:   24:
+        -:   25:/** @file bits/std_thread.h
+        -:   26: *  This is an internal header file, included by other library headers.
+        -:   27: *  Do not attempt to use it directly. @headername{thread}
+        -:   28: */
+        -:   29:
+        -:   30:#ifndef _GLIBCXX_THREAD_H
+        -:   31:#define _GLIBCXX_THREAD_H 1
+        -:   32:
+        -:   33:#pragma GCC system_header
+        -:   34:
+        -:   35:#if __cplusplus >= 201103L
+        -:   36:#include <bits/c++config.h>
+        -:   37:
+        -:   38:#include <iosfwd>		// std::basic_ostream
+        -:   39:#include <tuple>		// std::tuple
+        -:   40:#include <bits/functional_hash.h> // std::hash
+        -:   41:#include <bits/invoke.h>	// std::__invoke
+        -:   42:#include <bits/refwrap.h>       // not required, but helpful to users
+        -:   43:#include <bits/unique_ptr.h>	// std::unique_ptr
+        -:   44:
+        -:   45:#ifdef _GLIBCXX_HAS_GTHREADS
+        -:   46:# include <bits/gthr.h>
+        -:   47:#else
+        -:   48:# include <errno.h>
+        -:   49:# include <bits/functexcept.h>
+        -:   50:#endif
+        -:   51:
+        -:   52:namespace std _GLIBCXX_VISIBILITY(default)
+        -:   53:{
+        -:   54:_GLIBCXX_BEGIN_NAMESPACE_VERSION
+        -:   55:
+        -:   56:  /** @addtogroup threads
+        -:   57:   *  @{
+        -:   58:   */
+        -:   59:
+        -:   60:  /** A std::thread represents a new thread of execution.
+        -:   61:   *
+        -:   62:   * The default constructor creates an object that does not own a thread.
+        -:   63:   * The `thread(F&&, Args&&...)` constructor invokes a callable in a new
+        -:   64:   * thread, and owns that new thread. A `std::thread` that owns a thread
+        -:   65:   * is *joinable*. Joining a thread waits for it to finish executing,
+        -:   66:   * which happens when the callable running in that thread returns.
+        -:   67:   *
+        -:   68:   * A `std::thread` cannot be copied, but can be moved. Moving a joinable
+        -:   69:   * object transfers ownership of its thread to another object.
+        -:   70:   *
+        -:   71:   * A joinable `std::thread` must be explicitly joined (or detached) before
+        -:   72:   * it is destroyed or assigned to. Attempting to destroy a joinable thread
+        -:   73:   * will terminate the whole process.
+        -:   74:   *
+        -:   75:   * @headerfile thread
+        -:   76:   * @since C++11
+        -:   77:   */
+        -:   78:  class thread
+        -:   79:  {
+        -:   80:  public:
+        -:   81:#ifdef _GLIBCXX_HAS_GTHREADS
+        -:   82:    using native_handle_type = __gthread_t;
+        -:   83:#else
+        -:   84:    using native_handle_type = int;
+        -:   85:#endif
+        -:   86:
+        -:   87:    /** A std::thread::id is a unique identifier for a thread.
+        -:   88:     *
+        -:   89:     * @headerfile thread
+        -:   90:     * @since C++11
+        -:   91:     */
+        -:   92:    class id
+        -:   93:    {
+        -:   94:      native_handle_type	_M_thread;
+        -:   95:
+        -:   96:    public:
+       27:   97:      id() noexcept : _M_thread() { }
+        -:   98:
+        -:   99:      explicit
+        -:  100:      id(native_handle_type __id) : _M_thread(__id) { }
+        -:  101:
+        -:  102:    private:
+        -:  103:      friend class thread;
+        -:  104:      friend struct hash<id>;
+        -:  105:
+        -:  106:      friend bool
+        -:  107:      operator==(id __x, id __y) noexcept;
+        -:  108:
+        -:  109:#if __cpp_lib_three_way_comparison
+        -:  110:      friend strong_ordering
+        -:  111:      operator<=>(id __x, id __y) noexcept;
+        -:  112:#else
+        -:  113:      friend bool
+        -:  114:      operator<(id __x, id __y) noexcept;
+        -:  115:#endif
+        -:  116:
+        -:  117:      template<class _CharT, class _Traits>
+        -:  118:	friend basic_ostream<_CharT, _Traits>&
+        -:  119:	operator<<(basic_ostream<_CharT, _Traits>& __out, id __id);
+        -:  120:    };
+        -:  121:
+        -:  122:  private:
+        -:  123:    id				_M_id;
+        -:  124:
+        -:  125:    // _GLIBCXX_RESOLVE_LIB_DEFECTS
+        -:  126:    // 2097.  packaged_task constructors should be constrained
+        -:  127:    // 3039. Unnecessary decay in thread and packaged_task
+        -:  128:    template<typename _Tp>
+        -:  129:      using __not_same = __not_<is_same<__remove_cvref_t<_Tp>, thread>>;
+        -:  130:
+        -:  131:  public:
+        -:  132:    thread() noexcept = default;
+        -:  133:
+        -:  134:#ifdef _GLIBCXX_HAS_GTHREADS
+        -:  135:  private:
+        -:  136:    // This adds to user code that creates std:thread objects (because
+        -:  137:    // it is called by the template ctor below) strong references to
+        -:  138:    // pthread_create and pthread_join, which ensures they are both
+        -:  139:    // linked in even during static linking.  We can't depend on
+        -:  140:    // gthread calls to bring them in, because those may use weak
+        -:  141:    // references.
+        -:  142:    static void
+    #####:  143:    _M_thread_deps_never_run() {
+        -:  144:#ifdef GTHR_ACTIVE_PROXY
+        -:  145:      reinterpret_cast<void (*)(void)>(&pthread_create)();
+        -:  146:      reinterpret_cast<void (*)(void)>(&pthread_join)();
+        -:  147:#endif
+    #####:  148:    }
+        -:  149:
+        -:  150:  public:
+        -:  151:    template<typename _Callable, typename... _Args,
+        -:  152:	     typename = _Require<__not_same<_Callable>>>
+        -:  153:      explicit
+        9:  154:      thread(_Callable&& __f, _Args&&... __args)
+        9:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        9:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        9:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE7_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE6_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE5_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE4_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE3_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE2_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE1_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE0_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+_ZNSt6threadC2IZ4mainEUlvE_JEvEEOT_DpOT0_:
+        1:  154:      thread(_Callable&& __f, _Args&&... __args)
+        1:  155:      {
+        -:  156:	static_assert( __is_invocable<typename decay<_Callable>::type,
+        -:  157:				      typename decay<_Args>::type...>::value,
+        -:  158:	  "std::thread arguments must be invocable after conversion to rvalues"
+        -:  159:	  );
+        -:  160:
+        -:  161:	using _Wrapper = _Call_wrapper<_Callable, _Args...>;
+        -:  162:	// Create a call wrapper with DECAY_COPY(__f) as its target object
+        -:  163:	// and DECAY_COPY(__args)... as its bound argument entities.
+        1:  164:	_M_start_thread(_State_ptr(new _State_impl<_Wrapper>(
+        -:  165:	      std::forward<_Callable>(__f), std::forward<_Args>(__args)...)),
+        -:  166:	    _M_thread_deps_never_run);
+        1:  167:      }
+------------------
+        -:  168:#endif // _GLIBCXX_HAS_GTHREADS
+        -:  169:
+        9:  170:    ~thread()
+        -:  171:    {
+        9:  172:      if (joinable())
+        -:  173:	std::__terminate();
+        9:  174:    }
+        -:  175:
+        -:  176:    thread(const thread&) = delete;
+        -:  177:
+        -:  178:    thread(thread&& __t) noexcept
+        -:  179:    { swap(__t); }
+        -:  180:
+        -:  181:    thread& operator=(const thread&) = delete;
+        -:  182:
+        -:  183:    thread& operator=(thread&& __t) noexcept
+        -:  184:    {
+        -:  185:      if (joinable())
+        -:  186:	std::__terminate();
+        -:  187:      swap(__t);
+        -:  188:      return *this;
+        -:  189:    }
+        -:  190:
+        -:  191:    void
+        -:  192:    swap(thread& __t) noexcept
+        -:  193:    { std::swap(_M_id, __t._M_id); }
+        -:  194:
+        -:  195:    bool
+       18:  196:    joinable() const noexcept
+       18:  197:    { return !(_M_id == id()); }
+        -:  198:
+        -:  199:    void
+        -:  200:    join();
+        -:  201:
+        -:  202:    void
+        -:  203:    detach();
+        -:  204:
+        -:  205:    id
+        -:  206:    get_id() const noexcept
+        -:  207:    { return _M_id; }
+        -:  208:
+        -:  209:    /** @pre thread is joinable
+        -:  210:     */
+        -:  211:    native_handle_type
+        -:  212:    native_handle()
+        -:  213:    { return _M_id._M_thread; }
+        -:  214:
+        -:  215:    // Returns a value that hints at the number of hardware thread contexts.
+        -:  216:    static unsigned int
+        -:  217:    hardware_concurrency() noexcept;
+        -:  218:
+        -:  219:#ifdef _GLIBCXX_HAS_GTHREADS
+        -:  220:#ifndef _GLIBCXX_THREAD_IMPL
+        -:  221:  private:
+        -:  222:#endif
+        -:  223:    // Abstract base class for types that wrap arbitrary functors to be
+        -:  224:    // invoked in the new thread of execution.
+        -:  225:    struct _State
+        -:  226:    {
+        -:  227:      virtual ~_State();
+        -:  228:      virtual void _M_run() = 0;
+        -:  229:    };
+        -:  230:    using _State_ptr = unique_ptr<_State>;
+        -:  231:
+        -:  232:  private:
+        -:  233:    template<typename _Callable>
+        -:  234:      struct _State_impl : public _State
+        -:  235:      {
+        -:  236:	_Callable		_M_func;
+        -:  237:
+        -:  238:	template<typename... _Args>
+        9:  239:	  _State_impl(_Args&&... __args)
+        9:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        9:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE7_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE6_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE5_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE4_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE3_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE2_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE1_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE0_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE_EEEEEC2IJS3_EEEDpOT_:
+        1:  239:	  _State_impl(_Args&&... __args)
+        1:  240:	  : _M_func(std::forward<_Args>(__args)...)
+        1:  241:	  { }
+------------------
+        -:  242:
+        -:  243:	void
+        9:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE0_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE1_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE2_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE3_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE4_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE5_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE6_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+_ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZ4mainEUlvE7_EEEEE6_M_runEv:
+        1:  244:	_M_run() { _M_func(); }
+------------------
+        -:  245:      };
+        -:  246:
+        -:  247:    void
+        -:  248:    _M_start_thread(_State_ptr, void (*)());
+        -:  249:
+        -:  250:#if _GLIBCXX_THREAD_ABI_COMPAT
+        -:  251:  public:
+        -:  252:    struct _Impl_base;
+        -:  253:    typedef shared_ptr<_Impl_base>	__shared_base_type;
+        -:  254:    struct _Impl_base
+        -:  255:    {
+        -:  256:      __shared_base_type	_M_this_ptr;
+        -:  257:      virtual ~_Impl_base() = default;
+        -:  258:      virtual void _M_run() = 0;
+        -:  259:    };
+        -:  260:
+        -:  261:  private:
+        -:  262:    void
+        -:  263:    _M_start_thread(__shared_base_type, void (*)());
+        -:  264:
+        -:  265:    void
+        -:  266:    _M_start_thread(__shared_base_type);
+        -:  267:#endif
+        -:  268:
+        -:  269:  private:
+        -:  270:    // A call wrapper that does INVOKE(forwarded tuple elements...)
+        -:  271:    template<typename _Tuple>
+        -:  272:      struct _Invoker
+        -:  273:      {
+        -:  274:	template<typename... _Args>
+        -:  275:	  explicit
+        9:  276:	  _Invoker(_Args&&... __args)
+        9:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        9:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE7_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE6_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE5_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE4_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE3_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE2_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE1_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE0_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE_EEEC2IJS2_EEEDpOT_:
+        1:  276:	  _Invoker(_Args&&... __args)
+        1:  277:	  : _M_t(std::forward<_Args>(__args)...)
+        1:  278:	  { }
+------------------
+        -:  279:
+        -:  280:	_Tuple _M_t;
+        -:  281:
+        -:  282:	template<typename>
+        -:  283:	  struct __result;
+        -:  284:	template<typename _Fn, typename... _Args>
+        -:  285:	  struct __result<tuple<_Fn, _Args...>>
+        -:  286:	  : __invoke_result<_Fn, _Args...>
+        -:  287:	  { };
+        -:  288:
+        -:  289:	template<size_t... _Ind>
+        -:  290:	  typename __result<_Tuple>::type
+        9:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        9:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE0_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE1_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE2_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE3_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE4_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE5_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE6_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE7_EEE9_M_invokeIJLm0EEEEvSt12_Index_tupleIJXspT_EEE:
+        1:  291:	  _M_invoke(_Index_tuple<_Ind...>)
+        1:  292:	  { return std::__invoke(std::get<_Ind>(std::move(_M_t))...); }
+------------------
+        -:  293:
+        -:  294:	typename __result<_Tuple>::type
+        9:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        9:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE0_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE1_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE2_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE3_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE4_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE5_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE6_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+_ZNSt6thread8_InvokerISt5tupleIJZ4mainEUlvE7_EEEclEv:
+        1:  295:	operator()()
+        -:  296:	{
+        -:  297:	  using _Indices
+        -:  298:	    = typename _Build_index_tuple<tuple_size<_Tuple>::value>::__type;
+        1:  299:	  return _M_invoke(_Indices());
+        -:  300:	}
+------------------
+        -:  301:      };
+        -:  302:
+        -:  303:  public:
+        -:  304:    /// @cond undocumented
+        -:  305:    template<typename... _Tp>
+        -:  306:      using _Call_wrapper = _Invoker<tuple<typename decay<_Tp>::type...>>;
+        -:  307:    /// @endcond
+        -:  308:#endif // _GLIBCXX_HAS_GTHREADS
+        -:  309:  };
+        -:  310:
+        -:  311:#ifndef _GLIBCXX_HAS_GTHREADS
+        -:  312:  inline void thread::join() { std::__throw_system_error(EINVAL); }
+        -:  313:  inline void thread::detach() { std::__throw_system_error(EINVAL); }
+        -:  314:  inline unsigned int thread::hardware_concurrency() noexcept { return 0; }
+        -:  315:#endif
+        -:  316:
+        -:  317:  /// @relates std::thread
+        -:  318:  inline void
+        -:  319:  swap(thread& __x, thread& __y) noexcept
+        -:  320:  { __x.swap(__y); }
+        -:  321:
+        -:  322:  /// @relates std::thread::id
+        -:  323:  inline bool
+       18:  324:  operator==(thread::id __x, thread::id __y) noexcept
+        -:  325:  {
+        -:  326:    // pthread_equal is undefined if either thread ID is not valid, so we
+        -:  327:    // can't safely use __gthread_equal on default-constructed values (nor
+        -:  328:    // the non-zero value returned by this_thread::get_id() for
+        -:  329:    // single-threaded programs using GNU libc). Assume EqualityComparable.
+       18:  330:    return __x._M_thread == __y._M_thread;
+        -:  331:  }
+        -:  332:
+        -:  333:  // N.B. other comparison operators are defined in <thread>
+        -:  334:
+        -:  335:  // DR 889.
+        -:  336:  /// std::hash specialization for thread::id.
+        -:  337:  template<>
+        -:  338:    struct hash<thread::id>
+        -:  339:    : public __hash_base<size_t, thread::id>
+        -:  340:    {
+        -:  341:      size_t
+        -:  342:      operator()(const thread::id& __id) const noexcept
+        -:  343:      { return std::_Hash_impl::hash(__id._M_thread); }
+        -:  344:    };
+        -:  345:
+        -:  346:  namespace this_thread
+        -:  347:  {
+        -:  348:    /// The unique identifier of the current thread.
+        -:  349:    inline thread::id
+        -:  350:    get_id() noexcept
+        -:  351:    {
+        -:  352:#ifndef _GLIBCXX_HAS_GTHREADS
+        -:  353:      return thread::id(1);
+        -:  354:#elif defined _GLIBCXX_NATIVE_THREAD_ID
+        -:  355:      return thread::id(_GLIBCXX_NATIVE_THREAD_ID);
+        -:  356:#else
+        -:  357:      return thread::id(__gthread_self());
+        -:  358:#endif
+        -:  359:    }
+        -:  360:
+        -:  361:    /// Allow the implementation to schedule a different thread.
+        -:  362:    inline void
+        -:  363:    yield() noexcept
+        -:  364:    {
+        -:  365:#if defined _GLIBCXX_HAS_GTHREADS && defined _GLIBCXX_USE_SCHED_YIELD
+        -:  366:      __gthread_yield();
+        -:  367:#endif
+        -:  368:    }
+        -:  369:
+        -:  370:  } // namespace this_thread
+        -:  371:
+        -:  372:  /// @}
+        -:  373:
+        -:  374:_GLIBCXX_END_NAMESPACE_VERSION
+        -:  375:} // namespace
+        -:  376:#endif // C++11
+        -:  377:
+        -:  378:#endif // _GLIBCXX_THREAD_H

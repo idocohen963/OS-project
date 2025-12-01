@@ -1,0 +1,107 @@
+        -:    0:Source:algorithms/SCC.cpp
+        -:    1:#include "SCC.hpp"
+        -:    2:#include <string>
+        -:    3:#include <vector>
+        -:    4:
+        -:    5:/**
+        -:    6: * @brief Performs depth-first search on the original graph to determine finishing times.
+        -:    7: * @param g The graph to traverse
+        -:    8: * @param v The current vertex being visited
+        -:    9: * @param visited Vector tracking which vertices have been visited
+        -:   10: * @param order Vector storing vertices in post-order (finishing time order)
+        -:   11: * 
+        -:   12: * This is the first phase of Kosaraju's algorithm. It performs a standard DFS
+        -:   13: * but records vertices in post-order traversal, which gives us the finishing
+        -:   14: * times needed for the second phase.
+        -:   15: */
+       14:   16:void SCC::dfs(const Graph::Graph& g, int v, std::vector<bool>& visited, std::vector<int>& order) const {
+       14:   17:    visited[v] = true;  // Mark current vertex as visited
+        -:   18:    
+        -:   19:    // Visit all unvisited neighbors in the original graph
+       82:   20:    for (int u = 0; u < g.getNumVertices(); ++u) {
+       68:   21:        if (g.hasEdge(v, u) && !visited[u]) {
+       11:   22:            dfs(g, u, visited, order);  // Recursively visit neighbor
+        -:   23:        }
+        -:   24:    }
+        -:   25:    
+        -:   26:    // Add vertex to order after visiting all its descendants (post-order)
+       14:   27:    order.push_back(v);
+       14:   28:}
+        -:   29:
+        -:   30:/**
+        -:   31: * @brief Performs depth-first search on the transpose graph.
+        -:   32: * @param g The original graph (edges traversed in reverse)
+        -:   33: * @param v The current vertex being visited
+        -:   34: * @param visited Vector tracking which vertices have been visited
+        -:   35: * @param component Vector storing vertices in the current SCC
+        -:   36: * 
+        -:   37: * This is the second phase of Kosaraju's algorithm. It performs DFS on the
+        -:   38: * transpose graph (following edges in reverse direction) to collect all
+        -:   39: * vertices in the current strongly connected component.
+        -:   40: */
+       14:   41:void SCC::dfsRev(const Graph::Graph& g, int v, std::vector<bool>& visited, std::vector<int>& component) const {
+       14:   42:    visited[v] = true;      // Mark current vertex as visited
+       14:   43:    component.push_back(v); // Add vertex to current component
+        -:   44:    
+        -:   45:    // Visit all unvisited vertices that have edges TO v (transpose graph traversal)
+       82:   46:    for (int u = 0; u < g.getNumVertices(); ++u) {
+       68:   47:        if (g.hasEdge(u, v) && !visited[u]) {  // Check reverse edge (u -> v becomes v <- u)
+        4:   48:            dfsRev(g, u, visited, component);   // Recursively visit in transpose
+        -:   49:        }
+        -:   50:    }
+       14:   51:}
+        -:   52:
+        -:   53:/**
+        -:   54: * @brief Executes Kosaraju's algorithm to find all strongly connected components.
+        -:   55: * @param graph The directed graph to analyze
+        -:   56: * @return A formatted string listing all strongly connected components
+        -:   57: * 
+        -:   58: * Kosaraju's Algorithm:
+        -:   59: * 1. Perform DFS on original graph, recording finishing times
+        -:   60: * 2. Consider vertices in decreasing order of finishing times
+        -:   61: * 3. For each unvisited vertex, perform DFS on transpose graph
+        -:   62: * 4. Each DFS tree in step 3 is a strongly connected component
+        -:   63: */
+        3:   64:std::string SCC::run(const Graph::Graph& graph) {
+        3:   65:    if (!graph.isDirected()) {
+    #####:   66:        return "SCC algorithm is only applicable to directed graphs.";
+        -:   67:    }
+        3:   68:    int n = graph.getNumVertices();
+        3:   69:    std::vector<bool> visited(n, false);
+        3:   70:    std::vector<int> order;
+        -:   71:    
+        -:   72:    // Phase 1: DFS on original graph to get finishing times
+       17:   73:    for (int i = 0; i < n; ++i) {
+       14:   74:        if (!visited[i]) {
+        3:   75:            dfs(graph, i, visited, order);  // Fill order with post-order traversal
+        -:   76:        }
+        -:   77:    }
+        -:   78:    
+        -:   79:    // Reset visited array for second phase
+        3:   80:    std::fill(visited.begin(), visited.end(), false);
+        -:   81:    
+        3:   82:    int sccCount = 0;
+        3:   83:    std::vector<std::vector<int>> sccs;  // Store all strongly connected components
+        -:   84:    
+        -:   85:    // Phase 2: DFS on transpose graph in reverse finishing time order
+       17:   86:    for (int i = n - 1; i >= 0; --i) {
+       14:   87:        int v = order[i];  // Process vertices in decreasing finishing time order
+       14:   88:        if (!visited[v]) {
+       10:   89:            std::vector<int> comp;
+       10:   90:            dfsRev(graph, v, visited, comp);  // Find SCC starting from v
+       10:   91:            sccs.push_back(comp);             // Store the component
+       10:   92:            ++sccCount;
+       10:   93:        }
+        -:   94:    }
+        -:   95:    
+        -:   96:    // Format the results for output
+        3:   97:    std::string result = "Strongly connected components:";
+       13:   98:    for (size_t i = 0; i < sccs.size(); ++i) {
+       10:   99:        result += "\nComponent " + std::to_string(i+1) + ": ";
+       24:  100:        for (size_t j = 0; j < sccs[i].size(); ++j) {
+       14:  101:            result += std::to_string(sccs[i][j]);
+       14:  102:            if (j+1 < sccs[i].size()) result += ", ";
+        -:  103:        }
+        -:  104:    }
+        3:  105:    return result;
+        3:  106:}

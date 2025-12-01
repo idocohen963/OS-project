@@ -1,0 +1,85 @@
+        -:    0:Source:main.cpp
+        -:    1:#include <iostream>
+        -:    2:#include "Graph.hpp"
+        -:    3:#include <getopt.h>
+        -:    4:#include <stdexcept>
+        -:    5:#include <random>
+        -:    6:
+        -:    7:// Eulerian circuit Example: ./demo -v 4 -e 4 -s 4
+        -:    8:
+        4:    9:int main(int argc, char* argv[])  {
+        -:   10:    int vertices = -1, edges = -1, seed = -1;
+        -:   11:    bool directed = false;
+        -:   12:    int opt;
+        -:   13:
+       21:   14:    while ((opt = getopt(argc, argv, "v:e:s:d")) != -1) {
+       13:   15:        switch (opt) {
+        8:   16:            case 'v': vertices = std::stoi(optarg); break;
+        8:   17:            case 'e': edges = std::stoi(optarg); break;
+        8:   18:            case 's': seed = std::stoi(optarg); break;
+        -:   19:            case 'd': directed = true; break; 
+    #####:   20:            default:
+    #####:   21:                std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d] \n";
+        -:   22:                return 1;
+        -:   23:        }
+        -:   24:    }
+        -:   25:
+        -:   26:    // Check that all required parameters were provided 
+        4:   27:    if (vertices == -1 || edges == -1 ||  seed == -1) {
+    #####:   28:        std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d] \n";
+    #####:   29:        return 1;
+        -:   30:    }
+        -:   31:
+        -:   32:    // If values are invalid
+        4:   33:    if (vertices <= 0 || edges < 0) {
+    #####:   34:        throw std::invalid_argument(" parameters not actual or positive numbers.");
+        -:   35:    }
+        -:   36:    
+        -:   37:    // Ensure edge count does not exceed the maximum possible for given vertices
+        -:   38:    int maxEdges = directed
+        4:   39:                       ? vertices * (vertices - 1)      // directed graph
+        3:   40:                       : vertices * (vertices - 1) / 2; // undirected graph
+        4:   41:    if (edges > maxEdges) {
+    #####:   42:        throw std::invalid_argument("Too many edges for the given number of vertices.");
+        -:   43:    }
+        -:   44:    
+        -:   45:    
+        -:   46:    // Create a graph with x vertices as input
+        8:   47:    Graph::Graph g(vertices, directed);
+        -:   48:
+        -:   49:    //set random values:
+        -:   50:    // Initialize random number generator with the user-provided seed
+        4:   51:    std::mt19937 rng(seed);
+        -:   52:    // Create a uniform distribution over [0, vertices-1] for selecting random vertices
+        4:   53:    std::uniform_int_distribution<int> dist(0, vertices - 1);
+        -:   54:    
+        -:   55:    //add edges within the uniform range
+        -:   56:    int added = 0;
+       57:   57:    while (added < edges) {
+        -:   58:        int u = dist(rng);
+        -:   59:        int v = dist(rng);
+       49:   60:        if (u != v && !g.hasEdge(u, v)) {
+       35:   61:            g.addEdge(u, v);
+       35:   62:            ++added;
+        -:   63:        }
+        -:   64:    }
+        -:   65:
+        -:   66:    // Print the graph
+        4:   67:    g.printGraph();
+        -:   68:
+        -:   69:    // Find and print Eulerian circuit if exists
+        8:   70:    std::vector<int> circuit = g.findEulerianCircuit();
+        4:   71:    if (!circuit.empty()) {
+        1:   72:        std::cout << "Eulerian Circuit: ";
+        5:   73:        for (size_t i = 0; i < circuit.size(); ++i) {
+        4:   74:            std::cout << circuit[i];
+        4:   75:            if (i + 1 < circuit.size()) std::cout << " -> ";
+        -:   76:        }
+        -:   77:        std::cout << std::endl;
+        -:   78:    }else {
+        3:   79:         std::cout << std::endl << "No Eulerian circuit exists in this graph.\n";
+        -:   80:    }
+        -:   81:    
+        -:   82:    return 0;
+        -:   83:
+        -:   84:}

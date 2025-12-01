@@ -1,0 +1,436 @@
+        -:    0:Source:/usr/include/c++/13/bits/stl_stack.h
+        -:    1:// Stack implementation -*- C++ -*-
+        -:    2:
+        -:    3:// Copyright (C) 2001-2023 Free Software Foundation, Inc.
+        -:    4://
+        -:    5:// This file is part of the GNU ISO C++ Library.  This library is free
+        -:    6:// software; you can redistribute it and/or modify it under the
+        -:    7:// terms of the GNU General Public License as published by the
+        -:    8:// Free Software Foundation; either version 3, or (at your option)
+        -:    9:// any later version.
+        -:   10:
+        -:   11:// This library is distributed in the hope that it will be useful,
+        -:   12:// but WITHOUT ANY WARRANTY; without even the implied warranty of
+        -:   13:// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        -:   14:// GNU General Public License for more details.
+        -:   15:
+        -:   16:// Under Section 7 of GPL version 3, you are granted additional
+        -:   17:// permissions described in the GCC Runtime Library Exception, version
+        -:   18:// 3.1, as published by the Free Software Foundation.
+        -:   19:
+        -:   20:// You should have received a copy of the GNU General Public License and
+        -:   21:// a copy of the GCC Runtime Library Exception along with this program;
+        -:   22:// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+        -:   23:// <http://www.gnu.org/licenses/>.
+        -:   24:
+        -:   25:/*
+        -:   26: *
+        -:   27: * Copyright (c) 1994
+        -:   28: * Hewlett-Packard Company
+        -:   29: *
+        -:   30: * Permission to use, copy, modify, distribute and sell this software
+        -:   31: * and its documentation for any purpose is hereby granted without fee,
+        -:   32: * provided that the above copyright notice appear in all copies and
+        -:   33: * that both that copyright notice and this permission notice appear
+        -:   34: * in supporting documentation.  Hewlett-Packard Company makes no
+        -:   35: * representations about the suitability of this software for any
+        -:   36: * purpose.  It is provided "as is" without express or implied warranty.
+        -:   37: *
+        -:   38: *
+        -:   39: * Copyright (c) 1996,1997
+        -:   40: * Silicon Graphics Computer Systems, Inc.
+        -:   41: *
+        -:   42: * Permission to use, copy, modify, distribute and sell this software
+        -:   43: * and its documentation for any purpose is hereby granted without fee,
+        -:   44: * provided that the above copyright notice appear in all copies and
+        -:   45: * that both that copyright notice and this permission notice appear
+        -:   46: * in supporting documentation.  Silicon Graphics makes no
+        -:   47: * representations about the suitability of this software for any
+        -:   48: * purpose.  It is provided "as is" without express or implied warranty.
+        -:   49: */
+        -:   50:
+        -:   51:/** @file bits/stl_stack.h
+        -:   52: *  This is an internal header file, included by other library headers.
+        -:   53: *  Do not attempt to use it directly. @headername{stack}
+        -:   54: */
+        -:   55:
+        -:   56:#ifndef _STL_STACK_H
+        -:   57:#define _STL_STACK_H 1
+        -:   58:
+        -:   59:#include <bits/concept_check.h>
+        -:   60:#include <debug/debug.h>
+        -:   61:#if __cplusplus >= 201103L
+        -:   62:# include <bits/uses_allocator.h>
+        -:   63:#endif
+        -:   64:
+        -:   65:namespace std _GLIBCXX_VISIBILITY(default)
+        -:   66:{
+        -:   67:_GLIBCXX_BEGIN_NAMESPACE_VERSION
+        -:   68:
+        -:   69:  /**
+        -:   70:   *  @brief  A standard container giving FILO behavior.
+        -:   71:   *
+        -:   72:   *  @ingroup sequences
+        -:   73:   *
+        -:   74:   *  @tparam _Tp  Type of element.
+        -:   75:   *  @tparam _Sequence  Type of underlying sequence, defaults to deque<_Tp>.
+        -:   76:   *
+        -:   77:   *  Meets many of the requirements of a
+        -:   78:   *  <a href="tables.html#65">container</a>,
+        -:   79:   *  but does not define anything to do with iterators.  Very few of the
+        -:   80:   *  other standard container interfaces are defined.
+        -:   81:   *
+        -:   82:   *  This is not a true container, but an @e adaptor.  It holds
+        -:   83:   *  another container, and provides a wrapper interface to that
+        -:   84:   *  container.  The wrapper is what enforces strict
+        -:   85:   *  first-in-last-out %stack behavior.
+        -:   86:   *
+        -:   87:   *  The second template parameter defines the type of the underlying
+        -:   88:   *  sequence/container.  It defaults to std::deque, but it can be
+        -:   89:   *  any type that supports @c back, @c push_back, and @c pop_back,
+        -:   90:   *  such as std::list, std::vector, or an appropriate user-defined
+        -:   91:   *  type.
+        -:   92:   *
+        -:   93:   *  Members not found in @a normal containers are @c container_type,
+        -:   94:   *  which is a typedef for the second Sequence parameter, and @c
+        -:   95:   *  push, @c pop, and @c top, which are standard %stack/FILO
+        -:   96:   *  operations.
+        -:   97:  */
+        -:   98:  template<typename _Tp, typename _Sequence = deque<_Tp> >
+        -:   99:    class stack
+        -:  100:    {
+        -:  101:#ifdef _GLIBCXX_CONCEPT_CHECKS
+        -:  102:      // concept requirements
+        -:  103:      typedef typename _Sequence::value_type _Sequence_value_type;
+        -:  104:# if __cplusplus < 201103L
+        -:  105:      __glibcxx_class_requires(_Tp, _SGIAssignableConcept)
+        -:  106:      __glibcxx_class_requires(_Sequence, _BackInsertionSequenceConcept)
+        -:  107:# endif
+        -:  108:      __glibcxx_class_requires2(_Tp, _Sequence_value_type, _SameTypeConcept)
+        -:  109:#endif
+        -:  110:
+        -:  111:      template<typename _Tp1, typename _Seq1>
+        -:  112:	friend bool
+        -:  113:	operator==(const stack<_Tp1, _Seq1>&, const stack<_Tp1, _Seq1>&);
+        -:  114:
+        -:  115:      template<typename _Tp1, typename _Seq1>
+        -:  116:	friend bool
+        -:  117:	operator<(const stack<_Tp1, _Seq1>&, const stack<_Tp1, _Seq1>&);
+        -:  118:
+        -:  119:#if __cpp_lib_three_way_comparison
+        -:  120:      template<typename _Tp1, three_way_comparable _Seq1>
+        -:  121:	friend compare_three_way_result_t<_Seq1>
+        -:  122:	operator<=>(const stack<_Tp1, _Seq1>&, const stack<_Tp1, _Seq1>&);
+        -:  123:#endif
+        -:  124:
+        -:  125:#if __cplusplus >= 201103L
+        -:  126:      template<typename _Alloc>
+        -:  127:	using _Uses = typename
+        -:  128:	  enable_if<uses_allocator<_Sequence, _Alloc>::value>::type;
+        -:  129:
+        -:  130:#if __cplusplus >= 201703L
+        -:  131:      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+        -:  132:      // 2566. Requirements on the first template parameter of container
+        -:  133:      // adaptors
+        -:  134:      static_assert(is_same<_Tp, typename _Sequence::value_type>::value,
+        -:  135:	  "value_type must be the same as the underlying container");
+        -:  136:#endif // C++17
+        -:  137:#endif // C++11
+        -:  138:
+        -:  139:    public:
+        -:  140:      typedef typename _Sequence::value_type		value_type;
+        -:  141:      typedef typename _Sequence::reference		reference;
+        -:  142:      typedef typename _Sequence::const_reference	const_reference;
+        -:  143:      typedef typename _Sequence::size_type		size_type;
+        -:  144:      typedef	       _Sequence			container_type;
+        -:  145:
+        -:  146:    protected:
+        -:  147:      //  See queue::c for notes on this name.
+        -:  148:      _Sequence c;
+        -:  149:
+        -:  150:    public:
+        -:  151:      // XXX removed old def ctor, added def arg to this one to match 14882
+        -:  152:      /**
+        -:  153:       *  @brief  Default constructor creates no elements.
+        -:  154:       */
+        -:  155:#if __cplusplus < 201103L
+        -:  156:      explicit
+        -:  157:      stack(const _Sequence& __c = _Sequence())
+        -:  158:      : c(__c) { }
+        -:  159:#else
+        -:  160:      template<typename _Seq = _Sequence, typename _Requires = typename
+        -:  161:	       enable_if<is_default_constructible<_Seq>::value>::type>
+    #####:  162:	stack()
+    #####:  163:	: c() { }
+        -:  164:
+        -:  165:      explicit
+        -:  166:      stack(const _Sequence& __c)
+        -:  167:      : c(__c) { }
+        -:  168:
+        -:  169:      explicit
+        -:  170:      stack(_Sequence&& __c)
+        -:  171:      : c(std::move(__c)) { }
+        -:  172:
+        -:  173:#if __cplusplus > 202002L
+        -:  174:#define __cpp_lib_adaptor_iterator_pair_constructor 202106L
+        -:  175:
+        -:  176:      template<typename _InputIterator,
+        -:  177:	       typename = _RequireInputIter<_InputIterator>>
+        -:  178:	stack(_InputIterator __first, _InputIterator __last)
+        -:  179:	: c(__first, __last) { }
+        -:  180:#endif
+        -:  181:
+        -:  182:
+        -:  183:      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
+        -:  184:	explicit
+        -:  185:	stack(const _Alloc& __a)
+        -:  186:	: c(__a) { }
+        -:  187:
+        -:  188:      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
+        -:  189:	stack(const _Sequence& __c, const _Alloc& __a)
+        -:  190:	: c(__c, __a) { }
+        -:  191:
+        -:  192:      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
+        -:  193:	stack(_Sequence&& __c, const _Alloc& __a)
+        -:  194:	: c(std::move(__c), __a) { }
+        -:  195:
+        -:  196:      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
+        -:  197:	stack(const stack& __q, const _Alloc& __a)
+        -:  198:	: c(__q.c, __a) { }
+        -:  199:
+        -:  200:      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
+        -:  201:	stack(stack&& __q, const _Alloc& __a)
+        -:  202:	: c(std::move(__q.c), __a) { }
+        -:  203:
+        -:  204:#if __cplusplus > 202002L
+        -:  205:      template<typename _InputIterator, typename _Alloc,
+        -:  206:	       typename = _RequireInputIter<_InputIterator>,
+        -:  207:	       typename = _Uses<_Alloc>>
+        -:  208:	stack(_InputIterator __first, _InputIterator __last, const _Alloc& __a)
+        -:  209:	: c(__first, __last, __a) { }
+        -:  210:#endif
+        -:  211:#endif
+        -:  212:
+        -:  213:      /**
+        -:  214:       *  Returns true if the %stack is empty.
+        -:  215:       */
+        -:  216:      _GLIBCXX_NODISCARD bool
+    #####:  217:      empty() const
+    #####:  218:      { return c.empty(); }
+        -:  219:
+        -:  220:      /**  Returns the number of elements in the %stack.  */
+        -:  221:      _GLIBCXX_NODISCARD
+        -:  222:      size_type
+        -:  223:      size() const
+        -:  224:      { return c.size(); }
+        -:  225:
+        -:  226:      /**
+        -:  227:       *  Returns a read/write reference to the data at the first
+        -:  228:       *  element of the %stack.
+        -:  229:       */
+        -:  230:      _GLIBCXX_NODISCARD
+        -:  231:      reference
+    #####:  232:      top()
+        -:  233:      {
+        -:  234:	__glibcxx_requires_nonempty();
+    #####:  235:	return c.back();
+        -:  236:      }
+        -:  237:
+        -:  238:      /**
+        -:  239:       *  Returns a read-only (constant) reference to the data at the first
+        -:  240:       *  element of the %stack.
+        -:  241:       */
+        -:  242:      _GLIBCXX_NODISCARD
+        -:  243:      const_reference
+        -:  244:      top() const
+        -:  245:      {
+        -:  246:	__glibcxx_requires_nonempty();
+        -:  247:	return c.back();
+        -:  248:      }
+        -:  249:
+        -:  250:      /**
+        -:  251:       *  @brief  Add data to the top of the %stack.
+        -:  252:       *  @param  __x  Data to be added.
+        -:  253:       *
+        -:  254:       *  This is a typical %stack operation.  The function creates an
+        -:  255:       *  element at the top of the %stack and assigns the given data
+        -:  256:       *  to it.  The time complexity of the operation depends on the
+        -:  257:       *  underlying sequence.
+        -:  258:       */
+        -:  259:      void
+    #####:  260:      push(const value_type& __x)
+    #####:  261:      { c.push_back(__x); }
+        -:  262:
+        -:  263:#if __cplusplus >= 201103L
+        -:  264:      void
+        -:  265:      push(value_type&& __x)
+        -:  266:      { c.push_back(std::move(__x)); }
+        -:  267:
+        -:  268:#if __cplusplus > 201402L
+        -:  269:      template<typename... _Args>
+        -:  270:	decltype(auto)
+        -:  271:	emplace(_Args&&... __args)
+        -:  272:	{ return c.emplace_back(std::forward<_Args>(__args)...); }
+        -:  273:#else
+        -:  274:      template<typename... _Args>
+        -:  275:	void
+        -:  276:	emplace(_Args&&... __args)
+        -:  277:	{ c.emplace_back(std::forward<_Args>(__args)...); }
+        -:  278:#endif
+        -:  279:#endif
+        -:  280:
+        -:  281:      /**
+        -:  282:       *  @brief  Removes first element.
+        -:  283:       *
+        -:  284:       *  This is a typical %stack operation.  It shrinks the %stack
+        -:  285:       *  by one.  The time complexity of the operation depends on the
+        -:  286:       *  underlying sequence.
+        -:  287:       *
+        -:  288:       *  Note that no data is returned, and if the first element's
+        -:  289:       *  data is needed, it should be retrieved before pop() is
+        -:  290:       *  called.
+        -:  291:       */
+        -:  292:      void
+    #####:  293:      pop()
+        -:  294:      {
+        -:  295:	__glibcxx_requires_nonempty();
+    #####:  296:	c.pop_back();
+    #####:  297:      }
+        -:  298:
+        -:  299:#if __cplusplus >= 201103L
+        -:  300:      void
+        -:  301:      swap(stack& __s)
+        -:  302:#if __cplusplus > 201402L || !defined(__STRICT_ANSI__) // c++1z or gnu++11
+        -:  303:      noexcept(__is_nothrow_swappable<_Sequence>::value)
+        -:  304:#else
+        -:  305:      noexcept(__is_nothrow_swappable<_Tp>::value)
+        -:  306:#endif
+        -:  307:      {
+        -:  308:	using std::swap;
+        -:  309:	swap(c, __s.c);
+        -:  310:      }
+        -:  311:#endif // __cplusplus >= 201103L
+        -:  312:    };
+        -:  313:
+        -:  314:#if __cpp_deduction_guides >= 201606
+        -:  315:  template<typename _Container,
+        -:  316:	   typename = _RequireNotAllocator<_Container>>
+        -:  317:    stack(_Container) -> stack<typename _Container::value_type, _Container>;
+        -:  318:
+        -:  319:  template<typename _Container, typename _Allocator,
+        -:  320:	   typename = _RequireNotAllocator<_Container>>
+        -:  321:    stack(_Container, _Allocator)
+        -:  322:    -> stack<typename _Container::value_type, _Container>;
+        -:  323:
+        -:  324:#ifdef __cpp_lib_adaptor_iterator_pair_constructor
+        -:  325:  template<typename _InputIterator,
+        -:  326:	   typename _ValT
+        -:  327:	     = typename iterator_traits<_InputIterator>::value_type,
+        -:  328:	   typename = _RequireInputIter<_InputIterator>>
+        -:  329:    stack(_InputIterator, _InputIterator) -> stack<_ValT>;
+        -:  330:
+        -:  331:  template<typename _InputIterator, typename _Allocator,
+        -:  332:	   typename _ValT
+        -:  333:	     = typename iterator_traits<_InputIterator>::value_type,
+        -:  334:	   typename = _RequireInputIter<_InputIterator>,
+        -:  335:	   typename = _RequireAllocator<_Allocator>>
+        -:  336:    stack(_InputIterator, _InputIterator, _Allocator)
+        -:  337:    -> stack<_ValT, deque<_ValT, _Allocator>>;
+        -:  338:#endif
+        -:  339:#endif
+        -:  340:
+        -:  341:  /**
+        -:  342:   *  @brief  Stack equality comparison.
+        -:  343:   *  @param  __x  A %stack.
+        -:  344:   *  @param  __y  A %stack of the same type as @a __x.
+        -:  345:   *  @return  True iff the size and elements of the stacks are equal.
+        -:  346:   *
+        -:  347:   *  This is an equivalence relation.  Complexity and semantics
+        -:  348:   *  depend on the underlying sequence type, but the expected rules
+        -:  349:   *  are: this relation is linear in the size of the sequences, and
+        -:  350:   *  stacks are considered equivalent if their sequences compare
+        -:  351:   *  equal.
+        -:  352:  */
+        -:  353:  template<typename _Tp, typename _Seq>
+        -:  354:    _GLIBCXX_NODISCARD
+        -:  355:    inline bool
+        -:  356:    operator==(const stack<_Tp, _Seq>& __x, const stack<_Tp, _Seq>& __y)
+        -:  357:    { return __x.c == __y.c; }
+        -:  358:
+        -:  359:  /**
+        -:  360:   *  @brief  Stack ordering relation.
+        -:  361:   *  @param  __x  A %stack.
+        -:  362:   *  @param  __y  A %stack of the same type as @a x.
+        -:  363:   *  @return  True iff @a x is lexicographically less than @a __y.
+        -:  364:   *
+        -:  365:   *  This is an total ordering relation.  Complexity and semantics
+        -:  366:   *  depend on the underlying sequence type, but the expected rules
+        -:  367:   *  are: this relation is linear in the size of the sequences, the
+        -:  368:   *  elements must be comparable with @c <, and
+        -:  369:   *  std::lexicographical_compare() is usually used to make the
+        -:  370:   *  determination.
+        -:  371:  */
+        -:  372:  template<typename _Tp, typename _Seq>
+        -:  373:    _GLIBCXX_NODISCARD
+        -:  374:    inline bool
+        -:  375:    operator<(const stack<_Tp, _Seq>& __x, const stack<_Tp, _Seq>& __y)
+        -:  376:    { return __x.c < __y.c; }
+        -:  377:
+        -:  378:  /// Based on operator==
+        -:  379:  template<typename _Tp, typename _Seq>
+        -:  380:    _GLIBCXX_NODISCARD
+        -:  381:    inline bool
+        -:  382:    operator!=(const stack<_Tp, _Seq>& __x, const stack<_Tp, _Seq>& __y)
+        -:  383:    { return !(__x == __y); }
+        -:  384:
+        -:  385:  /// Based on operator<
+        -:  386:  template<typename _Tp, typename _Seq>
+        -:  387:    _GLIBCXX_NODISCARD
+        -:  388:    inline bool
+        -:  389:    operator>(const stack<_Tp, _Seq>& __x, const stack<_Tp, _Seq>& __y)
+        -:  390:    { return __y < __x; }
+        -:  391:
+        -:  392:  /// Based on operator<
+        -:  393:  template<typename _Tp, typename _Seq>
+        -:  394:    _GLIBCXX_NODISCARD
+        -:  395:    inline bool
+        -:  396:    operator<=(const stack<_Tp, _Seq>& __x, const stack<_Tp, _Seq>& __y)
+        -:  397:    { return !(__y < __x); }
+        -:  398:
+        -:  399:  /// Based on operator<
+        -:  400:  template<typename _Tp, typename _Seq>
+        -:  401:    _GLIBCXX_NODISCARD
+        -:  402:    inline bool
+        -:  403:    operator>=(const stack<_Tp, _Seq>& __x, const stack<_Tp, _Seq>& __y)
+        -:  404:    { return !(__x < __y); }
+        -:  405:
+        -:  406:#if __cpp_lib_three_way_comparison
+        -:  407:  template<typename _Tp, three_way_comparable _Seq>
+        -:  408:    [[nodiscard]]
+        -:  409:    inline compare_three_way_result_t<_Seq>
+        -:  410:    operator<=>(const stack<_Tp, _Seq>& __x, const stack<_Tp, _Seq>& __y)
+        -:  411:    { return __x.c <=> __y.c; }
+        -:  412:#endif
+        -:  413:
+        -:  414:#if __cplusplus >= 201103L
+        -:  415:  template<typename _Tp, typename _Seq>
+        -:  416:    inline
+        -:  417:#if __cplusplus > 201402L || !defined(__STRICT_ANSI__) // c++1z or gnu++11
+        -:  418:    // Constrained free swap overload, see p0185r1
+        -:  419:    typename enable_if<__is_swappable<_Seq>::value>::type
+        -:  420:#else
+        -:  421:    void
+        -:  422:#endif
+        -:  423:    swap(stack<_Tp, _Seq>& __x, stack<_Tp, _Seq>& __y)
+        -:  424:    noexcept(noexcept(__x.swap(__y)))
+        -:  425:    { __x.swap(__y); }
+        -:  426:
+        -:  427:  template<typename _Tp, typename _Seq, typename _Alloc>
+        -:  428:    struct uses_allocator<stack<_Tp, _Seq>, _Alloc>
+        -:  429:    : public uses_allocator<_Seq, _Alloc>::type { };
+        -:  430:#endif // __cplusplus >= 201103L
+        -:  431:
+        -:  432:_GLIBCXX_END_NAMESPACE_VERSION
+        -:  433:} // namespace
+        -:  434:
+        -:  435:#endif /* _STL_STACK_H */

@@ -1,0 +1,1527 @@
+        -:    0:Source:/usr/include/c++/13/optional
+        -:    1:// <optional> -*- C++ -*-
+        -:    2:
+        -:    3:// Copyright (C) 2013-2023 Free Software Foundation, Inc.
+        -:    4:// Copyright The GNU Toolchain Authors.
+        -:    5://
+        -:    6:// This file is part of the GNU ISO C++ Library.  This library is free
+        -:    7:// software; you can redistribute it and/or modify it under the
+        -:    8:// terms of the GNU General Public License as published by the
+        -:    9:// Free Software Foundation; either version 3, or (at your option)
+        -:   10:// any later version.
+        -:   11:
+        -:   12:// This library is distributed in the hope that it will be useful,
+        -:   13:// but WITHOUT ANY WARRANTY; without even the implied warranty of
+        -:   14:// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        -:   15:// GNU General Public License for more details.
+        -:   16:
+        -:   17:// Under Section 7 of GPL version 3, you are granted additional
+        -:   18:// permissions described in the GCC Runtime Library Exception, version
+        -:   19:// 3.1, as published by the Free Software Foundation.
+        -:   20:
+        -:   21:// You should have received a copy of the GNU General Public License and
+        -:   22:// a copy of the GCC Runtime Library Exception along with this program;
+        -:   23:// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+        -:   24:// <http://www.gnu.org/licenses/>.
+        -:   25:
+        -:   26:/** @file include/optional
+        -:   27: *  This is a Standard C++ Library header.
+        -:   28: */
+        -:   29:
+        -:   30:#ifndef _GLIBCXX_OPTIONAL
+        -:   31:#define _GLIBCXX_OPTIONAL 1
+        -:   32:
+        -:   33:#pragma GCC system_header
+        -:   34:
+        -:   35:#if __cplusplus >= 201703L
+        -:   36:
+        -:   37:#include <type_traits>
+        -:   38:#include <exception>
+        -:   39:#include <new>
+        -:   40:#include <initializer_list>
+        -:   41:#include <bits/enable_special_members.h>
+        -:   42:#include <bits/exception_defines.h>
+        -:   43:#include <bits/functional_hash.h>
+        -:   44:#include <bits/stl_construct.h> // _Construct
+        -:   45:#include <bits/utility.h> // in_place_t
+        -:   46:#if __cplusplus > 201703L
+        -:   47:# include <compare>
+        -:   48:# include <bits/invoke.h> // std::__invoke
+        -:   49:#endif
+        -:   50:#if __cplusplus > 202002L
+        -:   51:# include <concepts>
+        -:   52:#endif
+        -:   53:
+        -:   54:namespace std _GLIBCXX_VISIBILITY(default)
+        -:   55:{
+        -:   56:_GLIBCXX_BEGIN_NAMESPACE_VERSION
+        -:   57:
+        -:   58:  /**
+        -:   59:   *  @addtogroup utilities
+        -:   60:   *  @{
+        -:   61:   */
+        -:   62:
+        -:   63:#if __cplusplus > 202002L && __cpp_lib_concepts
+        -:   64:# define __cpp_lib_optional 202110L
+        -:   65:#elif __cplusplus >= 202002L
+        -:   66:# define __cpp_lib_optional 202106L
+        -:   67:#else
+        -:   68:# define __cpp_lib_optional 201606L
+        -:   69:#endif
+        -:   70:
+        -:   71:  template<typename _Tp>
+        -:   72:    class optional;
+        -:   73:
+        -:   74:  /// Tag type to disengage optional objects.
+        -:   75:  struct nullopt_t
+        -:   76:  {
+        -:   77:    // Do not user-declare default constructor at all for
+        -:   78:    // optional_value = {} syntax to work.
+        -:   79:    // nullopt_t() = delete;
+        -:   80:
+        -:   81:    // Used for constructing nullopt.
+        -:   82:    enum class _Construct { _Token };
+        -:   83:
+        -:   84:    // Must be constexpr for nullopt_t to be literal.
+        -:   85:    explicit constexpr nullopt_t(_Construct) noexcept { }
+        -:   86:  };
+        -:   87:
+        -:   88:  /// Tag to disengage optional objects.
+        -:   89:  inline constexpr nullopt_t nullopt { nullopt_t::_Construct::_Token };
+        -:   90:
+        -:   91:  template<typename _Fn> struct _Optional_func { _Fn& _M_f; };
+        -:   92:
+        -:   93:  /**
+        -:   94:   *  @brief Exception class thrown when a disengaged optional object is
+        -:   95:   *  dereferenced.
+        -:   96:   *  @ingroup exceptions
+        -:   97:   */
+        -:   98:  class bad_optional_access : public exception
+        -:   99:  {
+        -:  100:  public:
+        -:  101:    bad_optional_access() = default;
+        -:  102:    virtual ~bad_optional_access() = default;
+        -:  103:
+        -:  104:    const char* what() const noexcept override
+        -:  105:    { return "bad optional access"; }
+        -:  106:  };
+        -:  107:
+        -:  108:  // XXX Does not belong here.
+        -:  109:  [[__noreturn__]] inline void
+        -:  110:  __throw_bad_optional_access()
+        -:  111:  { _GLIBCXX_THROW_OR_ABORT(bad_optional_access()); }
+        -:  112:
+        -:  113:  // This class template manages construction/destruction of
+        -:  114:  // the contained value for a std::optional.
+        -:  115:  template <typename _Tp>
+        -:  116:    struct _Optional_payload_base
+        -:  117:    {
+        -:  118:      using _Stored_type = remove_const_t<_Tp>;
+        -:  119:
+        3:  120:      _Optional_payload_base() = default;
+       16:  121:      ~_Optional_payload_base() = default;
+        -:  122:
+        -:  123:      template<typename... _Args>
+        -:  124:	constexpr
+       13:  125:	_Optional_payload_base(in_place_t __tag, _Args&&... __args)
+       13:  126:	: _M_payload(__tag, std::forward<_Args>(__args)...),
+       13:  127:	  _M_engaged(true)
+       13:  128:	{ }
+        -:  129:
+        -:  130:      template<typename _Up, typename... _Args>
+        -:  131:	constexpr
+        -:  132:	_Optional_payload_base(std::initializer_list<_Up> __il,
+        -:  133:			       _Args&&... __args)
+        -:  134:	: _M_payload(__il, std::forward<_Args>(__args)...),
+        -:  135:	  _M_engaged(true)
+        -:  136:	{ }
+        -:  137:
+        -:  138:      // Constructor used by _Optional_base copy constructor when the
+        -:  139:      // contained value is not trivially copy constructible.
+        -:  140:      constexpr
+        -:  141:      _Optional_payload_base(bool /* __engaged */,
+        -:  142:			     const _Optional_payload_base& __other)
+        -:  143:      {
+        -:  144:	if (__other._M_engaged)
+        -:  145:	  this->_M_construct(__other._M_get());
+        -:  146:      }
+        -:  147:
+        -:  148:      // Constructor used by _Optional_base move constructor when the
+        -:  149:      // contained value is not trivially move constructible.
+        -:  150:      constexpr
+        -:  151:      _Optional_payload_base(bool /* __engaged */,
+        -:  152:			     _Optional_payload_base&& __other)
+        -:  153:      {
+        -:  154:	if (__other._M_engaged)
+        -:  155:	  this->_M_construct(std::move(__other._M_get()));
+        -:  156:      }
+        -:  157:
+        -:  158:      // Copy constructor is only used to when the contained value is
+        -:  159:      // trivially copy constructible.
+        -:  160:      _Optional_payload_base(const _Optional_payload_base&) = default;
+        -:  161:
+        -:  162:      // Move constructor is only used to when the contained value is
+        -:  163:      // trivially copy constructible.
+        -:  164:      _Optional_payload_base(_Optional_payload_base&&) = default;
+        -:  165:
+        -:  166:      _Optional_payload_base&
+        -:  167:      operator=(const _Optional_payload_base&) = default;
+        -:  168:
+        -:  169:      _Optional_payload_base&
+        -:  170:      operator=(_Optional_payload_base&&) = default;
+        -:  171:
+        -:  172:      // used to perform non-trivial copy assignment.
+        -:  173:      constexpr void
+        -:  174:      _M_copy_assign(const _Optional_payload_base& __other)
+        -:  175:      {
+        -:  176:	if (this->_M_engaged && __other._M_engaged)
+        -:  177:	  this->_M_get() = __other._M_get();
+        -:  178:	else
+        -:  179:	  {
+        -:  180:	    if (__other._M_engaged)
+        -:  181:	      this->_M_construct(__other._M_get());
+        -:  182:	    else
+        -:  183:	      this->_M_reset();
+        -:  184:	  }
+        -:  185:      }
+        -:  186:
+        -:  187:      // used to perform non-trivial move assignment.
+        -:  188:      constexpr void
+        -:  189:      _M_move_assign(_Optional_payload_base&& __other)
+        -:  190:      noexcept(__and_v<is_nothrow_move_constructible<_Tp>,
+        -:  191:		       is_nothrow_move_assignable<_Tp>>)
+        -:  192:      {
+        -:  193:	if (this->_M_engaged && __other._M_engaged)
+        -:  194:	  this->_M_get() = std::move(__other._M_get());
+        -:  195:	else
+        -:  196:	  {
+        -:  197:	    if (__other._M_engaged)
+        -:  198:	      this->_M_construct(std::move(__other._M_get()));
+        -:  199:	    else
+        -:  200:	      this->_M_reset();
+        -:  201:	  }
+        -:  202:      }
+        -:  203:
+        -:  204:      struct _Empty_byte { };
+        -:  205:
+        -:  206:      template<typename _Up, bool = is_trivially_destructible_v<_Up>>
+        -:  207:	union _Storage
+        -:  208:	{
+        -:  209:	  constexpr _Storage() noexcept : _M_empty() { }
+        -:  210:
+        -:  211:	  template<typename... _Args>
+        -:  212:	    constexpr
+        -:  213:	    _Storage(in_place_t, _Args&&... __args)
+        -:  214:	    : _M_value(std::forward<_Args>(__args)...)
+        -:  215:	    { }
+        -:  216:
+        -:  217:	  template<typename _Vp, typename... _Args>
+        -:  218:	    constexpr
+        -:  219:	    _Storage(std::initializer_list<_Vp> __il, _Args&&... __args)
+        -:  220:	    : _M_value(__il, std::forward<_Args>(__args)...)
+        -:  221:	    { }
+        -:  222:
+        -:  223:#if __cplusplus >= 202002L
+        -:  224:	  template<typename _Fn, typename _Arg>
+        -:  225:	    constexpr
+        -:  226:	    _Storage(_Optional_func<_Fn> __f, _Arg&& __arg)
+        -:  227:	    : _M_value(std::__invoke(std::forward<_Fn>(__f._M_f),
+        -:  228:				     std::forward<_Arg>(__arg)))
+        -:  229:	    { }
+        -:  230:#endif
+        -:  231:
+        -:  232:	  _Empty_byte _M_empty;
+        -:  233:	  _Up _M_value;
+        -:  234:	};
+        -:  235:
+        -:  236:      template<typename _Up>
+        -:  237:	union _Storage<_Up, false>
+        -:  238:	{
+        3:  239:	  constexpr _Storage() noexcept : _M_empty() { }
+        -:  240:
+        -:  241:	  template<typename... _Args>
+        -:  242:	    constexpr
+       13:  243:	    _Storage(in_place_t, _Args&&... __args)
+       13:  244:	    : _M_value(std::forward<_Args>(__args)...)
+       13:  245:	    { }
+        -:  246:
+        -:  247:	  template<typename _Vp, typename... _Args>
+        -:  248:	    constexpr
+        -:  249:	    _Storage(std::initializer_list<_Vp> __il, _Args&&... __args)
+        -:  250:	    : _M_value(__il, std::forward<_Args>(__args)...)
+        -:  251:	    { }
+        -:  252:
+        -:  253:#if __cplusplus >= 202002L
+        -:  254:	  template<typename _Fn, typename _Arg>
+        -:  255:	    constexpr
+        -:  256:	    _Storage(_Optional_func<_Fn> __f, _Arg&& __arg)
+        -:  257:	    : _M_value(std::__invoke(std::forward<_Fn>(__f._M_f),
+        -:  258:				     std::forward<_Arg>(__arg)))
+        -:  259:	    { }
+        -:  260:#endif
+        -:  261:
+        -:  262:	  // User-provided destructor is needed when _Up has non-trivial dtor.
+       16:  263:	  _GLIBCXX20_CONSTEXPR ~_Storage() { }
+        -:  264:
+        -:  265:	  _Empty_byte _M_empty;
+        -:  266:	  _Up _M_value;
+        -:  267:	};
+        -:  268:
+        -:  269:      _Storage<_Stored_type> _M_payload;
+        -:  270:
+        -:  271:      bool _M_engaged = false;
+        -:  272:
+        -:  273:      template<typename... _Args>
+        -:  274:	constexpr void
+        -:  275:	_M_construct(_Args&&... __args)
+        -:  276:	noexcept(is_nothrow_constructible_v<_Stored_type, _Args...>)
+        -:  277:	{
+        -:  278:	  std::_Construct(std::__addressof(this->_M_payload._M_value),
+        -:  279:			  std::forward<_Args>(__args)...);
+        -:  280:	  this->_M_engaged = true;
+        -:  281:	}
+        -:  282:
+        -:  283:      constexpr void
+       13:  284:      _M_destroy() noexcept
+        -:  285:      {
+       13:  286:	_M_engaged = false;
+       13:  287:	_M_payload._M_value.~_Stored_type();
+       13:  288:      }
+        -:  289:
+        -:  290:#if __cplusplus >= 202002L
+        -:  291:      template<typename _Fn, typename _Up>
+        -:  292:	constexpr void
+        -:  293:	_M_apply(_Optional_func<_Fn> __f, _Up&& __x)
+        -:  294:	{
+        -:  295:	  std::construct_at(std::__addressof(this->_M_payload),
+        -:  296:			    __f, std::forward<_Up>(__x));
+        -:  297:	  _M_engaged = true;
+        -:  298:	}
+        -:  299:#endif
+        -:  300:
+        -:  301:      // The _M_get() operations have _M_engaged as a precondition.
+        -:  302:      // They exist to access the contained value with the appropriate
+        -:  303:      // const-qualification, because _M_payload has had the const removed.
+        -:  304:
+        -:  305:      constexpr _Tp&
+       13:  306:      _M_get() noexcept
+       13:  307:      { return this->_M_payload._M_value; }
+        -:  308:
+        -:  309:      constexpr const _Tp&
+        -:  310:      _M_get() const noexcept
+        -:  311:      { return this->_M_payload._M_value; }
+        -:  312:
+        -:  313:      // _M_reset is a 'safe' operation with no precondition.
+        -:  314:      constexpr void
+       16:  315:      _M_reset() noexcept
+        -:  316:      {
+       16:  317:	if (this->_M_engaged)
+       13:  318:	  _M_destroy();
+        -:  319:	else // This seems redundant but improves codegen, see PR 112480.
+        3:  320:	  this->_M_engaged = false;
+       16:  321:      }
+        -:  322:    };
+        -:  323:
+        -:  324:  // Class template that manages the payload for optionals.
+        -:  325:  template <typename _Tp,
+        -:  326:	    bool /*_HasTrivialDestructor*/ =
+        -:  327:	      is_trivially_destructible_v<_Tp>,
+        -:  328:	    bool /*_HasTrivialCopy */ =
+        -:  329:	      is_trivially_copy_assignable_v<_Tp>
+        -:  330:	      && is_trivially_copy_constructible_v<_Tp>,
+        -:  331:	    bool /*_HasTrivialMove */ =
+        -:  332:	      is_trivially_move_assignable_v<_Tp>
+        -:  333:	      && is_trivially_move_constructible_v<_Tp>>
+        -:  334:    struct _Optional_payload;
+        -:  335:
+        -:  336:  // Payload for potentially-constexpr optionals (trivial copy/move/destroy).
+        -:  337:  template <typename _Tp>
+        -:  338:    struct _Optional_payload<_Tp, true, true, true>
+        -:  339:    : _Optional_payload_base<_Tp>
+        -:  340:    {
+        -:  341:      using _Optional_payload_base<_Tp>::_Optional_payload_base;
+        -:  342:
+        -:  343:      _Optional_payload() = default;
+        -:  344:    };
+        -:  345:
+        -:  346:  // Payload for optionals with non-trivial copy construction/assignment.
+        -:  347:  template <typename _Tp>
+        -:  348:    struct _Optional_payload<_Tp, true, false, true>
+        -:  349:    : _Optional_payload_base<_Tp>
+        -:  350:    {
+        -:  351:      using _Optional_payload_base<_Tp>::_Optional_payload_base;
+        -:  352:
+        -:  353:      _Optional_payload() = default;
+        -:  354:      ~_Optional_payload() = default;
+        -:  355:      _Optional_payload(const _Optional_payload&) = default;
+        -:  356:      _Optional_payload(_Optional_payload&&) = default;
+        -:  357:      _Optional_payload& operator=(_Optional_payload&&) = default;
+        -:  358:
+        -:  359:      // Non-trivial copy assignment.
+        -:  360:      constexpr
+        -:  361:      _Optional_payload&
+        -:  362:      operator=(const _Optional_payload& __other)
+        -:  363:      {
+        -:  364:	this->_M_copy_assign(__other);
+        -:  365:	return *this;
+        -:  366:      }
+        -:  367:    };
+        -:  368:
+        -:  369:  // Payload for optionals with non-trivial move construction/assignment.
+        -:  370:  template <typename _Tp>
+        -:  371:    struct _Optional_payload<_Tp, true, true, false>
+        -:  372:    : _Optional_payload_base<_Tp>
+        -:  373:    {
+        -:  374:      using _Optional_payload_base<_Tp>::_Optional_payload_base;
+        -:  375:
+        -:  376:      _Optional_payload() = default;
+        -:  377:      ~_Optional_payload() = default;
+        -:  378:      _Optional_payload(const _Optional_payload&) = default;
+        -:  379:      _Optional_payload(_Optional_payload&&) = default;
+        -:  380:      _Optional_payload& operator=(const _Optional_payload&) = default;
+        -:  381:
+        -:  382:      // Non-trivial move assignment.
+        -:  383:      constexpr
+        -:  384:      _Optional_payload&
+        -:  385:      operator=(_Optional_payload&& __other)
+        -:  386:      noexcept(__and_v<is_nothrow_move_constructible<_Tp>,
+        -:  387:		       is_nothrow_move_assignable<_Tp>>)
+        -:  388:      {
+        -:  389:	this->_M_move_assign(std::move(__other));
+        -:  390:	return *this;
+        -:  391:      }
+        -:  392:    };
+        -:  393:
+        -:  394:  // Payload for optionals with non-trivial copy and move assignment.
+        -:  395:  template <typename _Tp>
+        -:  396:    struct _Optional_payload<_Tp, true, false, false>
+        -:  397:    : _Optional_payload_base<_Tp>
+        -:  398:    {
+        -:  399:      using _Optional_payload_base<_Tp>::_Optional_payload_base;
+        -:  400:
+        3:  401:      _Optional_payload() = default;
+       16:  402:      ~_Optional_payload() = default;
+        -:  403:      _Optional_payload(const _Optional_payload&) = default;
+        -:  404:      _Optional_payload(_Optional_payload&&) = default;
+        -:  405:
+        -:  406:      // Non-trivial copy assignment.
+        -:  407:      constexpr
+        -:  408:      _Optional_payload&
+        -:  409:      operator=(const _Optional_payload& __other)
+        -:  410:      {
+        -:  411:	this->_M_copy_assign(__other);
+        -:  412:	return *this;
+        -:  413:      }
+        -:  414:
+        -:  415:      // Non-trivial move assignment.
+        -:  416:      constexpr
+        -:  417:      _Optional_payload&
+        -:  418:      operator=(_Optional_payload&& __other)
+        -:  419:      noexcept(__and_v<is_nothrow_move_constructible<_Tp>,
+        -:  420:		       is_nothrow_move_assignable<_Tp>>)
+        -:  421:      {
+        -:  422:	this->_M_move_assign(std::move(__other));
+        -:  423:	return *this;
+        -:  424:      }
+        -:  425:    };
+        -:  426:
+        -:  427:  // Payload for optionals with non-trivial destructors.
+        -:  428:  template <typename _Tp, bool _Copy, bool _Move>
+        -:  429:    struct _Optional_payload<_Tp, false, _Copy, _Move>
+        -:  430:    : _Optional_payload<_Tp, true, false, false>
+        -:  431:    {
+        -:  432:      // Base class implements all the constructors and assignment operators:
+        -:  433:      using _Optional_payload<_Tp, true, false, false>::_Optional_payload;
+        3:  434:      _Optional_payload() = default;
+        -:  435:      _Optional_payload(const _Optional_payload&) = default;
+        -:  436:      _Optional_payload(_Optional_payload&&) = default;
+        -:  437:      _Optional_payload& operator=(const _Optional_payload&) = default;
+        -:  438:      _Optional_payload& operator=(_Optional_payload&&) = default;
+        -:  439:
+        -:  440:      // Destructor needs to destroy the contained value:
+       16:  441:      _GLIBCXX20_CONSTEXPR ~_Optional_payload() { this->_M_reset(); }
+        -:  442:    };
+        -:  443:
+        -:  444:  // Common base class for _Optional_base<T> to avoid repeating these
+        -:  445:  // member functions in each specialization.
+        -:  446:  template<typename _Tp, typename _Dp>
+        -:  447:    class _Optional_base_impl
+        -:  448:    {
+        -:  449:    protected:
+        -:  450:      using _Stored_type = remove_const_t<_Tp>;
+        -:  451:
+        -:  452:      // The _M_construct operation has !_M_engaged as a precondition
+        -:  453:      // while _M_destruct has _M_engaged as a precondition.
+        -:  454:      template<typename... _Args>
+        -:  455:	constexpr void
+        -:  456:	_M_construct(_Args&&... __args)
+        -:  457:	noexcept(is_nothrow_constructible_v<_Stored_type, _Args...>)
+        -:  458:	{
+        -:  459:	  static_cast<_Dp*>(this)->_M_payload._M_construct(
+        -:  460:	    std::forward<_Args>(__args)...);
+        -:  461:	}
+        -:  462:
+        -:  463:      constexpr void
+        -:  464:      _M_destruct() noexcept
+        -:  465:      { static_cast<_Dp*>(this)->_M_payload._M_destroy(); }
+        -:  466:
+        -:  467:      // _M_reset is a 'safe' operation with no precondition.
+        -:  468:      constexpr void
+        -:  469:      _M_reset() noexcept
+        -:  470:      { static_cast<_Dp*>(this)->_M_payload._M_reset(); }
+        -:  471:
+       16:  472:      constexpr bool _M_is_engaged() const noexcept
+       16:  473:      { return static_cast<const _Dp*>(this)->_M_payload._M_engaged; }
+        -:  474:
+        -:  475:      // The _M_get operations have _M_engaged as a precondition.
+        -:  476:      constexpr _Tp&
+       13:  477:      _M_get() noexcept
+        -:  478:      {
+      13*:  479:	__glibcxx_assert(this->_M_is_engaged());
+       13:  480:	return static_cast<_Dp*>(this)->_M_payload._M_get();
+        -:  481:      }
+        -:  482:
+        -:  483:      constexpr const _Tp&
+        -:  484:      _M_get() const noexcept
+        -:  485:      {
+        -:  486:	__glibcxx_assert(this->_M_is_engaged());
+        -:  487:	return static_cast<const _Dp*>(this)->_M_payload._M_get();
+        -:  488:      }
+        -:  489:    };
+        -:  490:
+        -:  491:  /**
+        -:  492:    * @brief Class template that provides copy/move constructors of optional.
+        -:  493:    *
+        -:  494:    * Such a separate base class template is necessary in order to
+        -:  495:    * conditionally make copy/move constructors trivial.
+        -:  496:    *
+        -:  497:    * When the contained value is trivially copy/move constructible,
+        -:  498:    * the copy/move constructors of _Optional_base will invoke the
+        -:  499:    * trivial copy/move constructor of _Optional_payload. Otherwise,
+        -:  500:    * they will invoke _Optional_payload(bool, const _Optional_payload&)
+        -:  501:    * or _Optional_payload(bool, _Optional_payload&&) to initialize
+        -:  502:    * the contained value, if copying/moving an engaged optional.
+        -:  503:    *
+        -:  504:    * Whether the other special members are trivial is determined by the
+        -:  505:    * _Optional_payload<_Tp> specialization used for the _M_payload member.
+        -:  506:    *
+        -:  507:    * @see optional, _Enable_special_members
+        -:  508:    */
+        -:  509:  template<typename _Tp,
+        -:  510:	   bool = is_trivially_copy_constructible_v<_Tp>,
+        -:  511:	   bool = is_trivially_move_constructible_v<_Tp>>
+        -:  512:    struct _Optional_base
+        -:  513:    : _Optional_base_impl<_Tp, _Optional_base<_Tp>>
+        -:  514:    {
+        -:  515:      // Constructors for disengaged optionals.
+        3:  516:      constexpr _Optional_base() = default;
+        -:  517:
+        -:  518:      // Constructors for engaged optionals.
+        -:  519:      template<typename... _Args,
+        -:  520:	       enable_if_t<is_constructible_v<_Tp, _Args...>, bool> = false>
+        -:  521:	constexpr explicit
+       13:  522:	_Optional_base(in_place_t, _Args&&... __args)
+       13:  523:	: _M_payload(in_place, std::forward<_Args>(__args)...)
+       13:  524:	{ }
+        -:  525:
+        -:  526:      template<typename _Up, typename... _Args,
+        -:  527:	       enable_if_t<is_constructible_v<_Tp,
+        -:  528:					      initializer_list<_Up>&,
+        -:  529:					      _Args...>, bool> = false>
+        -:  530:	constexpr explicit
+        -:  531:	_Optional_base(in_place_t,
+        -:  532:		       initializer_list<_Up> __il,
+        -:  533:		       _Args&&... __args)
+        -:  534:	: _M_payload(in_place, __il, std::forward<_Args>(__args)...)
+        -:  535:	{ }
+        -:  536:
+        -:  537:      // Copy and move constructors.
+        -:  538:      constexpr
+        -:  539:      _Optional_base(const _Optional_base& __other)
+        -:  540:      : _M_payload(__other._M_payload._M_engaged, __other._M_payload)
+        -:  541:      { }
+        -:  542:
+        -:  543:      constexpr
+        -:  544:      _Optional_base(_Optional_base&& __other)
+        -:  545:      noexcept(is_nothrow_move_constructible_v<_Tp>)
+        -:  546:      : _M_payload(__other._M_payload._M_engaged,
+        -:  547:		   std::move(__other._M_payload))
+        -:  548:      { }
+        -:  549:
+        -:  550:      // Assignment operators.
+        -:  551:      _Optional_base& operator=(const _Optional_base&) = default;
+        -:  552:      _Optional_base& operator=(_Optional_base&&) = default;
+        -:  553:
+        -:  554:      _Optional_payload<_Tp> _M_payload;
+        -:  555:    };
+        -:  556:
+        -:  557:  template<typename _Tp>
+        -:  558:    struct _Optional_base<_Tp, false, true>
+        -:  559:    : _Optional_base_impl<_Tp, _Optional_base<_Tp>>
+        -:  560:    {
+        -:  561:      // Constructors for disengaged optionals.
+        -:  562:      constexpr _Optional_base() = default;
+        -:  563:
+        -:  564:      // Constructors for engaged optionals.
+        -:  565:      template<typename... _Args,
+        -:  566:	       enable_if_t<is_constructible_v<_Tp, _Args...>, bool> = false>
+        -:  567:	constexpr explicit
+        -:  568:	_Optional_base(in_place_t, _Args&&... __args)
+        -:  569:	: _M_payload(in_place, std::forward<_Args>(__args)...)
+        -:  570:	{ }
+        -:  571:
+        -:  572:      template<typename _Up, typename... _Args,
+        -:  573:	       enable_if_t<is_constructible_v<_Tp,
+        -:  574:					      initializer_list<_Up>&,
+        -:  575:					      _Args...>, bool> = false>
+        -:  576:	constexpr explicit
+        -:  577:	_Optional_base(in_place_t,
+        -:  578:		       initializer_list<_Up> __il,
+        -:  579:		       _Args... __args)
+        -:  580:	: _M_payload(in_place, __il, std::forward<_Args>(__args)...)
+        -:  581:	{ }
+        -:  582:
+        -:  583:      // Copy and move constructors.
+        -:  584:      constexpr _Optional_base(const _Optional_base& __other)
+        -:  585:      : _M_payload(__other._M_payload._M_engaged, __other._M_payload)
+        -:  586:      { }
+        -:  587:
+        -:  588:      constexpr _Optional_base(_Optional_base&& __other) = default;
+        -:  589:
+        -:  590:      // Assignment operators.
+        -:  591:      _Optional_base& operator=(const _Optional_base&) = default;
+        -:  592:      _Optional_base& operator=(_Optional_base&&) = default;
+        -:  593:
+        -:  594:      _Optional_payload<_Tp> _M_payload;
+        -:  595:    };
+        -:  596:
+        -:  597:  template<typename _Tp>
+        -:  598:    struct _Optional_base<_Tp, true, false>
+        -:  599:    : _Optional_base_impl<_Tp, _Optional_base<_Tp>>
+        -:  600:    {
+        -:  601:      // Constructors for disengaged optionals.
+        -:  602:      constexpr _Optional_base() = default;
+        -:  603:
+        -:  604:      // Constructors for engaged optionals.
+        -:  605:      template<typename... _Args,
+        -:  606:	       enable_if_t<is_constructible_v<_Tp, _Args...>, bool> = false>
+        -:  607:	constexpr explicit
+        -:  608:	_Optional_base(in_place_t, _Args&&... __args)
+        -:  609:	: _M_payload(in_place, std::forward<_Args>(__args)...)
+        -:  610:	{ }
+        -:  611:
+        -:  612:      template<typename _Up, typename... _Args,
+        -:  613:	       enable_if_t<is_constructible_v<_Tp,
+        -:  614:					      initializer_list<_Up>&,
+        -:  615:					      _Args...>, bool> = false>
+        -:  616:	constexpr explicit
+        -:  617:	_Optional_base(in_place_t,
+        -:  618:		       initializer_list<_Up> __il,
+        -:  619:		       _Args&&... __args)
+        -:  620:	: _M_payload(in_place, __il, std::forward<_Args>(__args)...)
+        -:  621:	{ }
+        -:  622:
+        -:  623:      // Copy and move constructors.
+        -:  624:      constexpr _Optional_base(const _Optional_base& __other) = default;
+        -:  625:
+        -:  626:      constexpr
+        -:  627:      _Optional_base(_Optional_base&& __other)
+        -:  628:      noexcept(is_nothrow_move_constructible_v<_Tp>)
+        -:  629:      : _M_payload(__other._M_payload._M_engaged,
+        -:  630:		   std::move(__other._M_payload))
+        -:  631:      { }
+        -:  632:
+        -:  633:      // Assignment operators.
+        -:  634:      _Optional_base& operator=(const _Optional_base&) = default;
+        -:  635:      _Optional_base& operator=(_Optional_base&&) = default;
+        -:  636:
+        -:  637:      _Optional_payload<_Tp> _M_payload;
+        -:  638:    };
+        -:  639:
+        -:  640:  template<typename _Tp>
+        -:  641:    struct _Optional_base<_Tp, true, true>
+        -:  642:    : _Optional_base_impl<_Tp, _Optional_base<_Tp>>
+        -:  643:    {
+        -:  644:      // Constructors for disengaged optionals.
+        -:  645:      constexpr _Optional_base() = default;
+        -:  646:
+        -:  647:      // Constructors for engaged optionals.
+        -:  648:      template<typename... _Args,
+        -:  649:	       enable_if_t<is_constructible_v<_Tp, _Args...>, bool> = false>
+        -:  650:	constexpr explicit
+        -:  651:	_Optional_base(in_place_t, _Args&&... __args)
+        -:  652:	: _M_payload(in_place, std::forward<_Args>(__args)...)
+        -:  653:	{ }
+        -:  654:
+        -:  655:      template<typename _Up, typename... _Args,
+        -:  656:	       enable_if_t<is_constructible_v<_Tp,
+        -:  657:					      initializer_list<_Up>&,
+        -:  658:					      _Args...>, bool> = false>
+        -:  659:	constexpr explicit
+        -:  660:	_Optional_base(in_place_t,
+        -:  661:		       initializer_list<_Up> __il,
+        -:  662:		       _Args&&... __args)
+        -:  663:	: _M_payload(in_place, __il, std::forward<_Args>(__args)...)
+        -:  664:	{ }
+        -:  665:
+        -:  666:      // Copy and move constructors.
+        -:  667:      constexpr _Optional_base(const _Optional_base& __other) = default;
+        -:  668:      constexpr _Optional_base(_Optional_base&& __other) = default;
+        -:  669:
+        -:  670:      // Assignment operators.
+        -:  671:      _Optional_base& operator=(const _Optional_base&) = default;
+        -:  672:      _Optional_base& operator=(_Optional_base&&) = default;
+        -:  673:
+        -:  674:      _Optional_payload<_Tp> _M_payload;
+        -:  675:    };
+        -:  676:
+        -:  677:  template<typename _Tp>
+        -:  678:  class optional;
+        -:  679:
+        -:  680:  template<typename _Tp>
+        -:  681:    inline constexpr bool __is_optional_v = false;
+        -:  682:  template<typename _Tp>
+        -:  683:    inline constexpr bool __is_optional_v<optional<_Tp>> = true;
+        -:  684:
+        -:  685:  template<typename _Tp, typename _Up>
+        -:  686:    using __converts_from_optional =
+        -:  687:      __or_<is_constructible<_Tp, const optional<_Up>&>,
+        -:  688:	    is_constructible<_Tp, optional<_Up>&>,
+        -:  689:	    is_constructible<_Tp, const optional<_Up>&&>,
+        -:  690:	    is_constructible<_Tp, optional<_Up>&&>,
+        -:  691:	    is_convertible<const optional<_Up>&, _Tp>,
+        -:  692:	    is_convertible<optional<_Up>&, _Tp>,
+        -:  693:	    is_convertible<const optional<_Up>&&, _Tp>,
+        -:  694:	    is_convertible<optional<_Up>&&, _Tp>>;
+        -:  695:
+        -:  696:  template<typename _Tp, typename _Up>
+        -:  697:    using __assigns_from_optional =
+        -:  698:      __or_<is_assignable<_Tp&, const optional<_Up>&>,
+        -:  699:	    is_assignable<_Tp&, optional<_Up>&>,
+        -:  700:	    is_assignable<_Tp&, const optional<_Up>&&>,
+        -:  701:	    is_assignable<_Tp&, optional<_Up>&&>>;
+        -:  702:
+        -:  703:  /**
+        -:  704:    * @brief Class template for optional values.
+        -:  705:    */
+        -:  706:  template<typename _Tp>
+        -:  707:    class optional
+        -:  708:    : private _Optional_base<_Tp>,
+        -:  709:      private _Enable_copy_move<
+        -:  710:	// Copy constructor.
+        -:  711:	is_copy_constructible_v<_Tp>,
+        -:  712:	// Copy assignment.
+        -:  713:	__and_v<is_copy_constructible<_Tp>, is_copy_assignable<_Tp>>,
+        -:  714:	// Move constructor.
+        -:  715:	is_move_constructible_v<_Tp>,
+        -:  716:	// Move assignment.
+        -:  717:	__and_v<is_move_constructible<_Tp>, is_move_assignable<_Tp>>,
+        -:  718:	// Unique tag type.
+        -:  719:	optional<_Tp>>
+        -:  720:    {
+        -:  721:      static_assert(!is_same_v<remove_cv_t<_Tp>, nullopt_t>);
+        -:  722:      static_assert(!is_same_v<remove_cv_t<_Tp>, in_place_t>);
+        -:  723:      static_assert(is_object_v<_Tp> && !is_array_v<_Tp>);
+        -:  724:
+        -:  725:    private:
+        -:  726:      using _Base = _Optional_base<_Tp>;
+        -:  727:
+        -:  728:      // SFINAE helpers
+        -:  729:      template<typename _Up>
+        -:  730:	using __not_self = __not_<is_same<optional, __remove_cvref_t<_Up>>>;
+        -:  731:      template<typename _Up>
+        -:  732:	using __not_tag = __not_<is_same<in_place_t, __remove_cvref_t<_Up>>>;
+        -:  733:      template<typename... _Cond>
+        -:  734:	using _Requires = enable_if_t<__and_v<_Cond...>, bool>;
+        -:  735:
+        -:  736:    public:
+        -:  737:      using value_type = _Tp;
+        -:  738:
+        -:  739:      constexpr optional() noexcept { }
+        -:  740:
+        3:  741:      constexpr optional(nullopt_t) noexcept { }
+        -:  742:
+        -:  743:      // Converting constructors for engaged optionals.
+        -:  744:      template<typename _Up = _Tp,
+        -:  745:	       _Requires<__not_self<_Up>, __not_tag<_Up>,
+        -:  746:			 is_constructible<_Tp, _Up>,
+        -:  747:			 is_convertible<_Up, _Tp>> = true>
+        -:  748:	constexpr
+       13:  749:	optional(_Up&& __t)
+        -:  750:	noexcept(is_nothrow_constructible_v<_Tp, _Up>)
+       13:  751:	: _Base(std::in_place, std::forward<_Up>(__t)) { }
+        -:  752:
+        -:  753:      template<typename _Up = _Tp,
+        -:  754:	       _Requires<__not_self<_Up>, __not_tag<_Up>,
+        -:  755:			 is_constructible<_Tp, _Up>,
+        -:  756:			 __not_<is_convertible<_Up, _Tp>>> = false>
+        -:  757:	explicit constexpr
+        -:  758:	optional(_Up&& __t)
+        -:  759:	noexcept(is_nothrow_constructible_v<_Tp, _Up>)
+        -:  760:	: _Base(std::in_place, std::forward<_Up>(__t)) { }
+        -:  761:
+        -:  762:      template<typename _Up,
+        -:  763:	       _Requires<__not_<is_same<_Tp, _Up>>,
+        -:  764:			 is_constructible<_Tp, const _Up&>,
+        -:  765:			 is_convertible<const _Up&, _Tp>,
+        -:  766:			 __not_<__converts_from_optional<_Tp, _Up>>> = true>
+        -:  767:	constexpr
+        -:  768:	optional(const optional<_Up>& __t)
+        -:  769:	noexcept(is_nothrow_constructible_v<_Tp, const _Up&>)
+        -:  770:	{
+        -:  771:	  if (__t)
+        -:  772:	    emplace(*__t);
+        -:  773:	}
+        -:  774:
+        -:  775:      template<typename _Up,
+        -:  776:	       _Requires<__not_<is_same<_Tp, _Up>>,
+        -:  777:			 is_constructible<_Tp, const _Up&>,
+        -:  778:			 __not_<is_convertible<const _Up&, _Tp>>,
+        -:  779:			 __not_<__converts_from_optional<_Tp, _Up>>> = false>
+        -:  780:	explicit constexpr
+        -:  781:	optional(const optional<_Up>& __t)
+        -:  782:	noexcept(is_nothrow_constructible_v<_Tp, const _Up&>)
+        -:  783:	{
+        -:  784:	  if (__t)
+        -:  785:	    emplace(*__t);
+        -:  786:	}
+        -:  787:
+        -:  788:      template<typename _Up,
+        -:  789:	       _Requires<__not_<is_same<_Tp, _Up>>,
+        -:  790:			 is_constructible<_Tp, _Up>,
+        -:  791:			 is_convertible<_Up, _Tp>,
+        -:  792:			 __not_<__converts_from_optional<_Tp, _Up>>> = true>
+        -:  793:	constexpr
+        -:  794:	optional(optional<_Up>&& __t)
+        -:  795:	noexcept(is_nothrow_constructible_v<_Tp, _Up>)
+        -:  796:	{
+        -:  797:	  if (__t)
+        -:  798:	    emplace(std::move(*__t));
+        -:  799:	}
+        -:  800:
+        -:  801:      template<typename _Up,
+        -:  802:	       _Requires<__not_<is_same<_Tp, _Up>>,
+        -:  803:			 is_constructible<_Tp, _Up>,
+        -:  804:			 __not_<is_convertible<_Up, _Tp>>,
+        -:  805:			 __not_<__converts_from_optional<_Tp, _Up>>> = false>
+        -:  806:	explicit constexpr
+        -:  807:	optional(optional<_Up>&& __t)
+        -:  808:	noexcept(is_nothrow_constructible_v<_Tp, _Up>)
+        -:  809:	{
+        -:  810:	  if (__t)
+        -:  811:	    emplace(std::move(*__t));
+        -:  812:	}
+        -:  813:
+        -:  814:      template<typename... _Args,
+        -:  815:	       _Requires<is_constructible<_Tp, _Args...>> = false>
+        -:  816:	explicit constexpr
+        -:  817:	optional(in_place_t, _Args&&... __args)
+        -:  818:	noexcept(is_nothrow_constructible_v<_Tp, _Args...>)
+        -:  819:	: _Base(std::in_place, std::forward<_Args>(__args)...) { }
+        -:  820:
+        -:  821:      template<typename _Up, typename... _Args,
+        -:  822:	       _Requires<is_constructible<_Tp,
+        -:  823:					  initializer_list<_Up>&,
+        -:  824:					  _Args...>> = false>
+        -:  825:	explicit constexpr
+        -:  826:	optional(in_place_t, initializer_list<_Up> __il, _Args&&... __args)
+        -:  827:	noexcept(is_nothrow_constructible_v<_Tp, initializer_list<_Up>&,
+        -:  828:					    _Args...>)
+        -:  829:	: _Base(std::in_place, __il, std::forward<_Args>(__args)...) { }
+        -:  830:
+        -:  831:
+        -:  832:      // Assignment operators.
+        -:  833:      _GLIBCXX20_CONSTEXPR optional&
+        -:  834:      operator=(nullopt_t) noexcept
+        -:  835:      {
+        -:  836:	this->_M_reset();
+        -:  837:	return *this;
+        -:  838:      }
+        -:  839:
+        -:  840:      template<typename _Up = _Tp>
+        -:  841:	_GLIBCXX20_CONSTEXPR
+        -:  842:	enable_if_t<__and_v<__not_self<_Up>,
+        -:  843:			    __not_<__and_<is_scalar<_Tp>,
+        -:  844:					  is_same<_Tp, decay_t<_Up>>>>,
+        -:  845:			    is_constructible<_Tp, _Up>,
+        -:  846:			    is_assignable<_Tp&, _Up>>,
+        -:  847:		    optional&>
+        -:  848:	operator=(_Up&& __u)
+        -:  849:	noexcept(__and_v<is_nothrow_constructible<_Tp, _Up>,
+        -:  850:			 is_nothrow_assignable<_Tp&, _Up>>)
+        -:  851:	{
+        -:  852:	  if (this->_M_is_engaged())
+        -:  853:	    this->_M_get() = std::forward<_Up>(__u);
+        -:  854:	  else
+        -:  855:	    this->_M_construct(std::forward<_Up>(__u));
+        -:  856:
+        -:  857:	  return *this;
+        -:  858:	}
+        -:  859:
+        -:  860:      template<typename _Up>
+        -:  861:	_GLIBCXX20_CONSTEXPR
+        -:  862:	enable_if_t<__and_v<__not_<is_same<_Tp, _Up>>,
+        -:  863:			    is_constructible<_Tp, const _Up&>,
+        -:  864:			    is_assignable<_Tp&, const _Up&>,
+        -:  865:			    __not_<__converts_from_optional<_Tp, _Up>>,
+        -:  866:			    __not_<__assigns_from_optional<_Tp, _Up>>>,
+        -:  867:		    optional&>
+        -:  868:	operator=(const optional<_Up>& __u)
+        -:  869:	noexcept(__and_v<is_nothrow_constructible<_Tp, const _Up&>,
+        -:  870:			 is_nothrow_assignable<_Tp&, const _Up&>>)
+        -:  871:	{
+        -:  872:	  if (__u)
+        -:  873:	    {
+        -:  874:	      if (this->_M_is_engaged())
+        -:  875:		this->_M_get() = *__u;
+        -:  876:	      else
+        -:  877:		this->_M_construct(*__u);
+        -:  878:	    }
+        -:  879:	  else
+        -:  880:	    {
+        -:  881:	      this->_M_reset();
+        -:  882:	    }
+        -:  883:	  return *this;
+        -:  884:	}
+        -:  885:
+        -:  886:      template<typename _Up>
+        -:  887:	_GLIBCXX20_CONSTEXPR
+        -:  888:	enable_if_t<__and_v<__not_<is_same<_Tp, _Up>>,
+        -:  889:			    is_constructible<_Tp, _Up>,
+        -:  890:			    is_assignable<_Tp&, _Up>,
+        -:  891:			    __not_<__converts_from_optional<_Tp, _Up>>,
+        -:  892:			    __not_<__assigns_from_optional<_Tp, _Up>>>,
+        -:  893:		    optional&>
+        -:  894:	operator=(optional<_Up>&& __u)
+        -:  895:	noexcept(__and_v<is_nothrow_constructible<_Tp, _Up>,
+        -:  896:			 is_nothrow_assignable<_Tp&, _Up>>)
+        -:  897:	{
+        -:  898:	  if (__u)
+        -:  899:	    {
+        -:  900:	      if (this->_M_is_engaged())
+        -:  901:		this->_M_get() = std::move(*__u);
+        -:  902:	      else
+        -:  903:		this->_M_construct(std::move(*__u));
+        -:  904:	    }
+        -:  905:	  else
+        -:  906:	    {
+        -:  907:	      this->_M_reset();
+        -:  908:	    }
+        -:  909:
+        -:  910:	  return *this;
+        -:  911:	}
+        -:  912:
+        -:  913:      template<typename... _Args>
+        -:  914:	_GLIBCXX20_CONSTEXPR
+        -:  915:	enable_if_t<is_constructible_v<_Tp, _Args...>, _Tp&>
+        -:  916:	emplace(_Args&&... __args)
+        -:  917:	noexcept(is_nothrow_constructible_v<_Tp, _Args...>)
+        -:  918:	{
+        -:  919:	  this->_M_reset();
+        -:  920:	  this->_M_construct(std::forward<_Args>(__args)...);
+        -:  921:	  return this->_M_get();
+        -:  922:	}
+        -:  923:
+        -:  924:      template<typename _Up, typename... _Args>
+        -:  925:	_GLIBCXX20_CONSTEXPR
+        -:  926:	enable_if_t<is_constructible_v<_Tp, initializer_list<_Up>&, _Args...>,
+        -:  927:		    _Tp&>
+        -:  928:	emplace(initializer_list<_Up> __il, _Args&&... __args)
+        -:  929:	noexcept(is_nothrow_constructible_v<_Tp, initializer_list<_Up>&,
+        -:  930:					    _Args...>)
+        -:  931:	{
+        -:  932:	  this->_M_reset();
+        -:  933:	  this->_M_construct(__il, std::forward<_Args>(__args)...);
+        -:  934:	  return this->_M_get();
+        -:  935:	}
+        -:  936:
+        -:  937:      // Destructor is implicit, implemented in _Optional_base.
+        -:  938:
+        -:  939:      // Swap.
+        -:  940:      _GLIBCXX20_CONSTEXPR void
+        -:  941:      swap(optional& __other)
+        -:  942:      noexcept(is_nothrow_move_constructible_v<_Tp>
+        -:  943:	       && is_nothrow_swappable_v<_Tp>)
+        -:  944:      {
+        -:  945:	using std::swap;
+        -:  946:
+        -:  947:	if (this->_M_is_engaged() && __other._M_is_engaged())
+        -:  948:	  swap(this->_M_get(), __other._M_get());
+        -:  949:	else if (this->_M_is_engaged())
+        -:  950:	  {
+        -:  951:	    __other._M_construct(std::move(this->_M_get()));
+        -:  952:	    this->_M_destruct();
+        -:  953:	  }
+        -:  954:	else if (__other._M_is_engaged())
+        -:  955:	  {
+        -:  956:	    this->_M_construct(std::move(__other._M_get()));
+        -:  957:	    __other._M_destruct();
+        -:  958:	  }
+        -:  959:      }
+        -:  960:
+        -:  961:      // Observers.
+        -:  962:      constexpr const _Tp*
+        -:  963:      operator->() const noexcept
+        -:  964:      { return std::__addressof(this->_M_get()); }
+        -:  965:
+        -:  966:      constexpr _Tp*
+        -:  967:      operator->() noexcept
+        -:  968:      { return std::__addressof(this->_M_get()); }
+        -:  969:
+        -:  970:      constexpr const _Tp&
+        -:  971:      operator*() const& noexcept
+        -:  972:      { return this->_M_get(); }
+        -:  973:
+        -:  974:      constexpr _Tp&
+       13:  975:      operator*()& noexcept
+       13:  976:      { return this->_M_get(); }
+        -:  977:
+        -:  978:      constexpr _Tp&&
+        -:  979:      operator*()&& noexcept
+        -:  980:      { return std::move(this->_M_get()); }
+        -:  981:
+        -:  982:      constexpr const _Tp&&
+        -:  983:      operator*() const&& noexcept
+        -:  984:      { return std::move(this->_M_get()); }
+        -:  985:
+       16:  986:      constexpr explicit operator bool() const noexcept
+       16:  987:      { return this->_M_is_engaged(); }
+        -:  988:
+        -:  989:      constexpr bool has_value() const noexcept
+        -:  990:      { return this->_M_is_engaged(); }
+        -:  991:
+        -:  992:      constexpr const _Tp&
+        -:  993:      value() const&
+        -:  994:      {
+        -:  995:	if (this->_M_is_engaged())
+        -:  996:	  return this->_M_get();
+        -:  997:	__throw_bad_optional_access();
+        -:  998:      }
+        -:  999:
+        -: 1000:      constexpr _Tp&
+        -: 1001:      value()&
+        -: 1002:      {
+        -: 1003:	if (this->_M_is_engaged())
+        -: 1004:	  return this->_M_get();
+        -: 1005:	__throw_bad_optional_access();
+        -: 1006:      }
+        -: 1007:
+        -: 1008:      constexpr _Tp&&
+        -: 1009:      value()&&
+        -: 1010:      {
+        -: 1011:	if (this->_M_is_engaged())
+        -: 1012:	  return std::move(this->_M_get());
+        -: 1013:	__throw_bad_optional_access();
+        -: 1014:      }
+        -: 1015:
+        -: 1016:      constexpr const _Tp&&
+        -: 1017:      value() const&&
+        -: 1018:      {
+        -: 1019:	if (this->_M_is_engaged())
+        -: 1020:	  return std::move(this->_M_get());
+        -: 1021:	__throw_bad_optional_access();
+        -: 1022:      }
+        -: 1023:
+        -: 1024:      template<typename _Up>
+        -: 1025:	constexpr _Tp
+        -: 1026:	value_or(_Up&& __u) const&
+        -: 1027:	{
+        -: 1028:	  static_assert(is_copy_constructible_v<_Tp>);
+        -: 1029:	  static_assert(is_convertible_v<_Up&&, _Tp>);
+        -: 1030:
+        -: 1031:	  if (this->_M_is_engaged())
+        -: 1032:	    return this->_M_get();
+        -: 1033:	  else
+        -: 1034:	    return static_cast<_Tp>(std::forward<_Up>(__u));
+        -: 1035:	}
+        -: 1036:
+        -: 1037:      template<typename _Up>
+        -: 1038:	constexpr _Tp
+        -: 1039:	value_or(_Up&& __u) &&
+        -: 1040:	{
+        -: 1041:	  static_assert(is_move_constructible_v<_Tp>);
+        -: 1042:	  static_assert(is_convertible_v<_Up&&, _Tp>);
+        -: 1043:
+        -: 1044:	  if (this->_M_is_engaged())
+        -: 1045:	    return std::move(this->_M_get());
+        -: 1046:	  else
+        -: 1047:	    return static_cast<_Tp>(std::forward<_Up>(__u));
+        -: 1048:	}
+        -: 1049:
+        -: 1050:#if __cpp_lib_optional >= 202110L
+        -: 1051:      // [optional.monadic]
+        -: 1052:
+        -: 1053:      template<typename _Fn>
+        -: 1054:	constexpr auto
+        -: 1055:	and_then(_Fn&& __f) &
+        -: 1056:	{
+        -: 1057:	  using _Up = remove_cvref_t<invoke_result_t<_Fn, _Tp&>>;
+        -: 1058:	  static_assert(__is_optional_v<remove_cvref_t<_Up>>,
+        -: 1059:			"the function passed to std::optional<T>::and_then "
+        -: 1060:			"must return a std::optional");
+        -: 1061:	  if (has_value())
+        -: 1062:	    return std::__invoke(std::forward<_Fn>(__f), **this);
+        -: 1063:	  else
+        -: 1064:	    return _Up();
+        -: 1065:	}
+        -: 1066:
+        -: 1067:      template<typename _Fn>
+        -: 1068:	constexpr auto
+        -: 1069:	and_then(_Fn&& __f) const &
+        -: 1070:	{
+        -: 1071:	  using _Up = remove_cvref_t<invoke_result_t<_Fn, const _Tp&>>;
+        -: 1072:	  static_assert(__is_optional_v<_Up>,
+        -: 1073:			"the function passed to std::optional<T>::and_then "
+        -: 1074:			"must return a std::optional");
+        -: 1075:	  if (has_value())
+        -: 1076:	    return std::__invoke(std::forward<_Fn>(__f), **this);
+        -: 1077:	  else
+        -: 1078:	    return _Up();
+        -: 1079:	}
+        -: 1080:
+        -: 1081:      template<typename _Fn>
+        -: 1082:	constexpr auto
+        -: 1083:	and_then(_Fn&& __f) &&
+        -: 1084:	{
+        -: 1085:	  using _Up = remove_cvref_t<invoke_result_t<_Fn, _Tp>>;
+        -: 1086:	  static_assert(__is_optional_v<remove_cvref_t<_Up>>,
+        -: 1087:			"the function passed to std::optional<T>::and_then "
+        -: 1088:			"must return a std::optional");
+        -: 1089:	  if (has_value())
+        -: 1090:	    return std::__invoke(std::forward<_Fn>(__f), std::move(**this));
+        -: 1091:	  else
+        -: 1092:	    return _Up();
+        -: 1093:	}
+        -: 1094:
+        -: 1095:      template<typename _Fn>
+        -: 1096:	constexpr auto
+        -: 1097:	and_then(_Fn&& __f) const &&
+        -: 1098:	{
+        -: 1099:	  using _Up = remove_cvref_t<invoke_result_t<_Fn, const _Tp>>;
+        -: 1100:	  static_assert(__is_optional_v<remove_cvref_t<_Up>>,
+        -: 1101:			"the function passed to std::optional<T>::and_then "
+        -: 1102:			"must return a std::optional");
+        -: 1103:	  if (has_value())
+        -: 1104:	    return std::__invoke(std::forward<_Fn>(__f), std::move(**this));
+        -: 1105:	  else
+        -: 1106:	    return _Up();
+        -: 1107:	}
+        -: 1108:
+        -: 1109:      template<typename _Fn>
+        -: 1110:	constexpr auto
+        -: 1111:	transform(_Fn&& __f) &
+        -: 1112:	{
+        -: 1113:	  using _Up = remove_cv_t<invoke_result_t<_Fn, _Tp&>>;
+        -: 1114:	  if (has_value())
+        -: 1115:	    return optional<_Up>(_Optional_func<_Fn>{__f}, **this);
+        -: 1116:	  else
+        -: 1117:	    return optional<_Up>();
+        -: 1118:	}
+        -: 1119:
+        -: 1120:      template<typename _Fn>
+        -: 1121:	constexpr auto
+        -: 1122:	transform(_Fn&& __f) const &
+        -: 1123:	{
+        -: 1124:	  using _Up = remove_cv_t<invoke_result_t<_Fn, const _Tp&>>;
+        -: 1125:	  if (has_value())
+        -: 1126:	    return optional<_Up>(_Optional_func<_Fn>{__f}, **this);
+        -: 1127:	  else
+        -: 1128:	    return optional<_Up>();
+        -: 1129:	}
+        -: 1130:
+        -: 1131:      template<typename _Fn>
+        -: 1132:	constexpr auto
+        -: 1133:	transform(_Fn&& __f) &&
+        -: 1134:	{
+        -: 1135:	  using _Up = remove_cv_t<invoke_result_t<_Fn, _Tp>>;
+        -: 1136:	  if (has_value())
+        -: 1137:	    return optional<_Up>(_Optional_func<_Fn>{__f}, std::move(**this));
+        -: 1138:	  else
+        -: 1139:	    return optional<_Up>();
+        -: 1140:	}
+        -: 1141:
+        -: 1142:      template<typename _Fn>
+        -: 1143:	constexpr auto
+        -: 1144:	transform(_Fn&& __f) const &&
+        -: 1145:	{
+        -: 1146:	  using _Up = remove_cv_t<invoke_result_t<_Fn, const _Tp>>;
+        -: 1147:	  if (has_value())
+        -: 1148:	    return optional<_Up>(_Optional_func<_Fn>{__f}, std::move(**this));
+        -: 1149:	  else
+        -: 1150:	    return optional<_Up>();
+        -: 1151:	}
+        -: 1152:
+        -: 1153:      template<typename _Fn> requires invocable<_Fn> && copy_constructible<_Tp>
+        -: 1154:	constexpr optional
+        -: 1155:	or_else(_Fn&& __f) const&
+        -: 1156:	{
+        -: 1157:	  using _Up = invoke_result_t<_Fn>;
+        -: 1158:	  static_assert(is_same_v<remove_cvref_t<_Up>, optional>,
+        -: 1159:			"the function passed to std::optional<T>::or_else "
+        -: 1160:			"must return a std::optional<T>");
+        -: 1161:
+        -: 1162:	  if (has_value())
+        -: 1163:	    return *this;
+        -: 1164:	  else
+        -: 1165:	    return std::forward<_Fn>(__f)();
+        -: 1166:	}
+        -: 1167:
+        -: 1168:      template<typename _Fn> requires invocable<_Fn> && move_constructible<_Tp>
+        -: 1169:	constexpr optional
+        -: 1170:	or_else(_Fn&& __f) &&
+        -: 1171:	{
+        -: 1172:	  using _Up = invoke_result_t<_Fn>;
+        -: 1173:	  static_assert(is_same_v<remove_cvref_t<_Up>, optional>,
+        -: 1174:			"the function passed to std::optional<T>::or_else "
+        -: 1175:			"must return a std::optional<T>");
+        -: 1176:
+        -: 1177:	  if (has_value())
+        -: 1178:	    return std::move(*this);
+        -: 1179:	  else
+        -: 1180:	    return std::forward<_Fn>(__f)();
+        -: 1181:	}
+        -: 1182:#endif
+        -: 1183:
+        -: 1184:      _GLIBCXX20_CONSTEXPR void reset() noexcept { this->_M_reset(); }
+        -: 1185:
+        -: 1186:    private:
+        -: 1187:#if __cplusplus >= 202002L
+        -: 1188:      template<typename _Up> friend class optional;
+        -: 1189:
+        -: 1190:      template<typename _Fn, typename _Value>
+        -: 1191:	explicit constexpr
+        -: 1192:	optional(_Optional_func<_Fn> __f, _Value&& __v)
+        -: 1193:	{
+        -: 1194:	  this->_M_payload._M_apply(__f, std::forward<_Value>(__v));
+        -: 1195:	}
+        -: 1196:#endif
+        -: 1197:    };
+        -: 1198:
+        -: 1199:  template<typename _Tp>
+        -: 1200:    using __optional_relop_t =
+        -: 1201:      enable_if_t<is_convertible<_Tp, bool>::value, bool>;
+        -: 1202:
+        -: 1203:  template<typename _Tp, typename _Up>
+        -: 1204:    using __optional_eq_t = __optional_relop_t<
+        -: 1205:      decltype(std::declval<const _Tp&>() == std::declval<const _Up&>())
+        -: 1206:      >;
+        -: 1207:
+        -: 1208:  template<typename _Tp, typename _Up>
+        -: 1209:    using __optional_ne_t = __optional_relop_t<
+        -: 1210:      decltype(std::declval<const _Tp&>() != std::declval<const _Up&>())
+        -: 1211:      >;
+        -: 1212:
+        -: 1213:  template<typename _Tp, typename _Up>
+        -: 1214:    using __optional_lt_t = __optional_relop_t<
+        -: 1215:      decltype(std::declval<const _Tp&>() < std::declval<const _Up&>())
+        -: 1216:      >;
+        -: 1217:
+        -: 1218:  template<typename _Tp, typename _Up>
+        -: 1219:    using __optional_gt_t = __optional_relop_t<
+        -: 1220:      decltype(std::declval<const _Tp&>() > std::declval<const _Up&>())
+        -: 1221:      >;
+        -: 1222:
+        -: 1223:  template<typename _Tp, typename _Up>
+        -: 1224:    using __optional_le_t = __optional_relop_t<
+        -: 1225:      decltype(std::declval<const _Tp&>() <= std::declval<const _Up&>())
+        -: 1226:      >;
+        -: 1227:
+        -: 1228:  template<typename _Tp, typename _Up>
+        -: 1229:    using __optional_ge_t = __optional_relop_t<
+        -: 1230:      decltype(std::declval<const _Tp&>() >= std::declval<const _Up&>())
+        -: 1231:      >;
+        -: 1232:
+        -: 1233:  // Comparisons between optional values.
+        -: 1234:  template<typename _Tp, typename _Up>
+        -: 1235:    constexpr auto
+        -: 1236:    operator==(const optional<_Tp>& __lhs, const optional<_Up>& __rhs)
+        -: 1237:    -> __optional_eq_t<_Tp, _Up>
+        -: 1238:    {
+        -: 1239:      return static_cast<bool>(__lhs) == static_cast<bool>(__rhs)
+        -: 1240:	     && (!__lhs || *__lhs == *__rhs);
+        -: 1241:    }
+        -: 1242:
+        -: 1243:  template<typename _Tp, typename _Up>
+        -: 1244:    constexpr auto
+        -: 1245:    operator!=(const optional<_Tp>& __lhs, const optional<_Up>& __rhs)
+        -: 1246:    -> __optional_ne_t<_Tp, _Up>
+        -: 1247:    {
+        -: 1248:      return static_cast<bool>(__lhs) != static_cast<bool>(__rhs)
+        -: 1249:	|| (static_cast<bool>(__lhs) && *__lhs != *__rhs);
+        -: 1250:    }
+        -: 1251:
+        -: 1252:  template<typename _Tp, typename _Up>
+        -: 1253:    constexpr auto
+        -: 1254:    operator<(const optional<_Tp>& __lhs, const optional<_Up>& __rhs)
+        -: 1255:    -> __optional_lt_t<_Tp, _Up>
+        -: 1256:    {
+        -: 1257:      return static_cast<bool>(__rhs) && (!__lhs || *__lhs < *__rhs);
+        -: 1258:    }
+        -: 1259:
+        -: 1260:  template<typename _Tp, typename _Up>
+        -: 1261:    constexpr auto
+        -: 1262:    operator>(const optional<_Tp>& __lhs, const optional<_Up>& __rhs)
+        -: 1263:    -> __optional_gt_t<_Tp, _Up>
+        -: 1264:    {
+        -: 1265:      return static_cast<bool>(__lhs) && (!__rhs || *__lhs > *__rhs);
+        -: 1266:    }
+        -: 1267:
+        -: 1268:  template<typename _Tp, typename _Up>
+        -: 1269:    constexpr auto
+        -: 1270:    operator<=(const optional<_Tp>& __lhs, const optional<_Up>& __rhs)
+        -: 1271:    -> __optional_le_t<_Tp, _Up>
+        -: 1272:    {
+        -: 1273:      return !__lhs || (static_cast<bool>(__rhs) && *__lhs <= *__rhs);
+        -: 1274:    }
+        -: 1275:
+        -: 1276:  template<typename _Tp, typename _Up>
+        -: 1277:    constexpr auto
+        -: 1278:    operator>=(const optional<_Tp>& __lhs, const optional<_Up>& __rhs)
+        -: 1279:    -> __optional_ge_t<_Tp, _Up>
+        -: 1280:    {
+        -: 1281:      return !__rhs || (static_cast<bool>(__lhs) && *__lhs >= *__rhs);
+        -: 1282:    }
+        -: 1283:
+        -: 1284:#ifdef __cpp_lib_three_way_comparison
+        -: 1285:  template<typename _Tp, three_way_comparable_with<_Tp> _Up>
+        -: 1286:    constexpr compare_three_way_result_t<_Tp, _Up>
+        -: 1287:    operator<=>(const optional<_Tp>& __x, const optional<_Up>& __y)
+        -: 1288:    {
+        -: 1289:      return __x && __y ? *__x <=> *__y : bool(__x) <=> bool(__y);
+        -: 1290:    }
+        -: 1291:#endif
+        -: 1292:
+        -: 1293:  // Comparisons with nullopt.
+        -: 1294:  template<typename _Tp>
+        -: 1295:    constexpr bool
+        -: 1296:    operator==(const optional<_Tp>& __lhs, nullopt_t) noexcept
+        -: 1297:    { return !__lhs; }
+        -: 1298:
+        -: 1299:#ifdef __cpp_lib_three_way_comparison
+        -: 1300:  template<typename _Tp>
+        -: 1301:    constexpr strong_ordering
+        -: 1302:    operator<=>(const optional<_Tp>& __x, nullopt_t) noexcept
+        -: 1303:    { return bool(__x) <=> false; }
+        -: 1304:#else
+        -: 1305:  template<typename _Tp>
+        -: 1306:    constexpr bool
+        -: 1307:    operator==(nullopt_t, const optional<_Tp>& __rhs) noexcept
+        -: 1308:    { return !__rhs; }
+        -: 1309:
+        -: 1310:  template<typename _Tp>
+        -: 1311:    constexpr bool
+        -: 1312:    operator!=(const optional<_Tp>& __lhs, nullopt_t) noexcept
+        -: 1313:    { return static_cast<bool>(__lhs); }
+        -: 1314:
+        -: 1315:  template<typename _Tp>
+        -: 1316:    constexpr bool
+        -: 1317:    operator!=(nullopt_t, const optional<_Tp>& __rhs) noexcept
+        -: 1318:    { return static_cast<bool>(__rhs); }
+        -: 1319:
+        -: 1320:  template<typename _Tp>
+        -: 1321:    constexpr bool
+        -: 1322:    operator<(const optional<_Tp>& /* __lhs */, nullopt_t) noexcept
+        -: 1323:    { return false; }
+        -: 1324:
+        -: 1325:  template<typename _Tp>
+        -: 1326:    constexpr bool
+        -: 1327:    operator<(nullopt_t, const optional<_Tp>& __rhs) noexcept
+        -: 1328:    { return static_cast<bool>(__rhs); }
+        -: 1329:
+        -: 1330:  template<typename _Tp>
+        -: 1331:    constexpr bool
+        -: 1332:    operator>(const optional<_Tp>& __lhs, nullopt_t) noexcept
+        -: 1333:    { return static_cast<bool>(__lhs); }
+        -: 1334:
+        -: 1335:  template<typename _Tp>
+        -: 1336:    constexpr bool
+        -: 1337:    operator>(nullopt_t, const optional<_Tp>& /* __rhs */) noexcept
+        -: 1338:    { return false; }
+        -: 1339:
+        -: 1340:  template<typename _Tp>
+        -: 1341:    constexpr bool
+        -: 1342:    operator<=(const optional<_Tp>& __lhs, nullopt_t) noexcept
+        -: 1343:    { return !__lhs; }
+        -: 1344:
+        -: 1345:  template<typename _Tp>
+        -: 1346:    constexpr bool
+        -: 1347:    operator<=(nullopt_t, const optional<_Tp>& /* __rhs */) noexcept
+        -: 1348:    { return true; }
+        -: 1349:
+        -: 1350:  template<typename _Tp>
+        -: 1351:    constexpr bool
+        -: 1352:    operator>=(const optional<_Tp>& /* __lhs */, nullopt_t) noexcept
+        -: 1353:    { return true; }
+        -: 1354:
+        -: 1355:  template<typename _Tp>
+        -: 1356:    constexpr bool
+        -: 1357:    operator>=(nullopt_t, const optional<_Tp>& __rhs) noexcept
+        -: 1358:    { return !__rhs; }
+        -: 1359:#endif // three-way-comparison
+        -: 1360:
+        -: 1361:  // Comparisons with value type.
+        -: 1362:  template<typename _Tp, typename _Up>
+        -: 1363:    constexpr auto
+        -: 1364:    operator==(const optional<_Tp>& __lhs, const _Up& __rhs)
+        -: 1365:    -> __optional_eq_t<_Tp, _Up>
+        -: 1366:    { return __lhs && *__lhs == __rhs; }
+        -: 1367:
+        -: 1368:  template<typename _Tp, typename _Up>
+        -: 1369:    constexpr auto
+        -: 1370:    operator==(const _Up& __lhs, const optional<_Tp>& __rhs)
+        -: 1371:    -> __optional_eq_t<_Up, _Tp>
+        -: 1372:    { return __rhs && __lhs == *__rhs; }
+        -: 1373:
+        -: 1374:  template<typename _Tp, typename _Up>
+        -: 1375:    constexpr auto
+        -: 1376:    operator!=(const optional<_Tp>& __lhs, const _Up& __rhs)
+        -: 1377:    -> __optional_ne_t<_Tp, _Up>
+        -: 1378:    { return !__lhs || *__lhs != __rhs; }
+        -: 1379:
+        -: 1380:  template<typename _Tp, typename _Up>
+        -: 1381:    constexpr auto
+        -: 1382:    operator!=(const _Up& __lhs, const optional<_Tp>& __rhs)
+        -: 1383:    -> __optional_ne_t<_Up, _Tp>
+        -: 1384:    { return !__rhs || __lhs != *__rhs; }
+        -: 1385:
+        -: 1386:  template<typename _Tp, typename _Up>
+        -: 1387:    constexpr auto
+        -: 1388:    operator<(const optional<_Tp>& __lhs, const _Up& __rhs)
+        -: 1389:    -> __optional_lt_t<_Tp, _Up>
+        -: 1390:    { return !__lhs || *__lhs < __rhs; }
+        -: 1391:
+        -: 1392:  template<typename _Tp, typename _Up>
+        -: 1393:    constexpr auto
+        -: 1394:    operator<(const _Up& __lhs, const optional<_Tp>& __rhs)
+        -: 1395:    -> __optional_lt_t<_Up, _Tp>
+        -: 1396:    { return __rhs && __lhs < *__rhs; }
+        -: 1397:
+        -: 1398:  template<typename _Tp, typename _Up>
+        -: 1399:    constexpr auto
+        -: 1400:    operator>(const optional<_Tp>& __lhs, const _Up& __rhs)
+        -: 1401:    -> __optional_gt_t<_Tp, _Up>
+        -: 1402:    { return __lhs && *__lhs > __rhs; }
+        -: 1403:
+        -: 1404:  template<typename _Tp, typename _Up>
+        -: 1405:    constexpr auto
+        -: 1406:    operator>(const _Up& __lhs, const optional<_Tp>& __rhs)
+        -: 1407:    -> __optional_gt_t<_Up, _Tp>
+        -: 1408:    { return !__rhs || __lhs > *__rhs; }
+        -: 1409:
+        -: 1410:  template<typename _Tp, typename _Up>
+        -: 1411:    constexpr auto
+        -: 1412:    operator<=(const optional<_Tp>& __lhs, const _Up& __rhs)
+        -: 1413:    -> __optional_le_t<_Tp, _Up>
+        -: 1414:    { return !__lhs || *__lhs <= __rhs; }
+        -: 1415:
+        -: 1416:  template<typename _Tp, typename _Up>
+        -: 1417:    constexpr auto
+        -: 1418:    operator<=(const _Up& __lhs, const optional<_Tp>& __rhs)
+        -: 1419:    -> __optional_le_t<_Up, _Tp>
+        -: 1420:    { return __rhs && __lhs <= *__rhs; }
+        -: 1421:
+        -: 1422:  template<typename _Tp, typename _Up>
+        -: 1423:    constexpr auto
+        -: 1424:    operator>=(const optional<_Tp>& __lhs, const _Up& __rhs)
+        -: 1425:    -> __optional_ge_t<_Tp, _Up>
+        -: 1426:    { return __lhs && *__lhs >= __rhs; }
+        -: 1427:
+        -: 1428:  template<typename _Tp, typename _Up>
+        -: 1429:    constexpr auto
+        -: 1430:    operator>=(const _Up& __lhs, const optional<_Tp>& __rhs)
+        -: 1431:    -> __optional_ge_t<_Up, _Tp>
+        -: 1432:    { return !__rhs || __lhs >= *__rhs; }
+        -: 1433:
+        -: 1434:#ifdef __cpp_lib_three_way_comparison
+        -: 1435:  template<typename _Tp, typename _Up>
+        -: 1436:    requires (!__is_optional_v<_Up>)
+        -: 1437:      && three_way_comparable_with<_Up, _Tp>
+        -: 1438:    constexpr compare_three_way_result_t<_Tp, _Up>
+        -: 1439:    operator<=>(const optional<_Tp>& __x, const _Up& __v)
+        -: 1440:    { return bool(__x) ? *__x <=> __v : strong_ordering::less; }
+        -: 1441:#endif
+        -: 1442:
+        -: 1443:  // Swap and creation functions.
+        -: 1444:
+        -: 1445:  // _GLIBCXX_RESOLVE_LIB_DEFECTS
+        -: 1446:  // 2748. swappable traits for optionals
+        -: 1447:  template<typename _Tp>
+        -: 1448:    _GLIBCXX20_CONSTEXPR
+        -: 1449:    inline enable_if_t<is_move_constructible_v<_Tp> && is_swappable_v<_Tp>>
+        -: 1450:    swap(optional<_Tp>& __lhs, optional<_Tp>& __rhs)
+        -: 1451:    noexcept(noexcept(__lhs.swap(__rhs)))
+        -: 1452:    { __lhs.swap(__rhs); }
+        -: 1453:
+        -: 1454:  template<typename _Tp>
+        -: 1455:    enable_if_t<!(is_move_constructible_v<_Tp> && is_swappable_v<_Tp>)>
+        -: 1456:    swap(optional<_Tp>&, optional<_Tp>&) = delete;
+        -: 1457:
+        -: 1458:  template<typename _Tp>
+        -: 1459:    constexpr
+        -: 1460:    enable_if_t<is_constructible_v<decay_t<_Tp>, _Tp>,
+        -: 1461:		optional<decay_t<_Tp>>>
+        -: 1462:    make_optional(_Tp&& __t)
+        -: 1463:    noexcept(is_nothrow_constructible_v<optional<decay_t<_Tp>>, _Tp>)
+        -: 1464:    { return optional<decay_t<_Tp>>{ std::forward<_Tp>(__t) }; }
+        -: 1465:
+        -: 1466:  template<typename _Tp, typename... _Args>
+        -: 1467:    constexpr
+        -: 1468:    enable_if_t<is_constructible_v<_Tp, _Args...>,
+        -: 1469:		optional<_Tp>>
+        -: 1470:    make_optional(_Args&&... __args)
+        -: 1471:    noexcept(is_nothrow_constructible_v<_Tp, _Args...>)
+        -: 1472:    { return optional<_Tp>{ in_place, std::forward<_Args>(__args)... }; }
+        -: 1473:
+        -: 1474:  template<typename _Tp, typename _Up, typename... _Args>
+        -: 1475:    constexpr
+        -: 1476:    enable_if_t<is_constructible_v<_Tp, initializer_list<_Up>&, _Args...>,
+        -: 1477:		optional<_Tp>>
+        -: 1478:    make_optional(initializer_list<_Up> __il, _Args&&... __args)
+        -: 1479:    noexcept(is_nothrow_constructible_v<_Tp, initializer_list<_Up>&, _Args...>)
+        -: 1480:    { return optional<_Tp>{ in_place, __il, std::forward<_Args>(__args)... }; }
+        -: 1481:
+        -: 1482:  // Hash.
+        -: 1483:
+        -: 1484:  template<typename _Tp, typename _Up = remove_const_t<_Tp>,
+        -: 1485:	   bool = __poison_hash<_Up>::__enable_hash_call>
+        -: 1486:    struct __optional_hash_call_base
+        -: 1487:    {
+        -: 1488:      size_t
+        -: 1489:      operator()(const optional<_Tp>& __t) const
+        -: 1490:      noexcept(noexcept(hash<_Up>{}(*__t)))
+        -: 1491:      {
+        -: 1492:	// We pick an arbitrary hash for disengaged optionals which hopefully
+        -: 1493:	// usual values of _Tp won't typically hash to.
+        -: 1494:	constexpr size_t __magic_disengaged_hash = static_cast<size_t>(-3333);
+        -: 1495:	return __t ? hash<_Up>{}(*__t) : __magic_disengaged_hash;
+        -: 1496:      }
+        -: 1497:    };
+        -: 1498:
+        -: 1499:  template<typename _Tp, typename _Up>
+        -: 1500:    struct __optional_hash_call_base<_Tp, _Up, false> {};
+        -: 1501:
+        -: 1502:  template<typename _Tp>
+        -: 1503:    struct hash<optional<_Tp>>
+        -: 1504:    : private __poison_hash<remove_const_t<_Tp>>,
+        -: 1505:      public __optional_hash_call_base<_Tp>
+        -: 1506:    {
+        -: 1507:      using result_type [[__deprecated__]] = size_t;
+        -: 1508:      using argument_type [[__deprecated__]] = optional<_Tp>;
+        -: 1509:    };
+        -: 1510:
+        -: 1511:  template<typename _Tp>
+        -: 1512:    struct __is_fast_hash<hash<optional<_Tp>>> : __is_fast_hash<hash<_Tp>>
+        -: 1513:    { };
+        -: 1514:
+        -: 1515:  /// @}
+        -: 1516:
+        -: 1517:#if __cpp_deduction_guides >= 201606
+        -: 1518:  template <typename _Tp> optional(_Tp) -> optional<_Tp>;
+        -: 1519:#endif
+        -: 1520:
+        -: 1521:_GLIBCXX_END_NAMESPACE_VERSION
+        -: 1522:} // namespace std
+        -: 1523:
+        -: 1524:#endif // C++17
+        -: 1525:
+        -: 1526:#endif // _GLIBCXX_OPTIONAL

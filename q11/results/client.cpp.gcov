@@ -1,0 +1,276 @@
+        -:    0:Source:client.cpp
+        -:    1:
+        -:    2:/**
+        -:    3: * @file client.cpp
+        -:    4: * @brief Client for the graph server. Sends either a random-parameters request or a
+        -:    5: *        manual graph description and prints the server's response.
+        -:    6: *
+        -:    7: * The client supports two modes: --random and --manual. In --random mode the client
+        -:    8: * sends the desired number of vertices/edges and an RNG seed. In --manual mode the
+        -:    9: * client reads edges from stdin and forwards them to the server. The protocol is a simple
+        -:   10: * text protocol (see usage text below).
+        -:   11: */
+        -:   12:
+        -:   13:#include <arpa/inet.h>
+        -:   14:#include <netinet/in.h>
+        -:   15:#include <sys/socket.h>
+        -:   16:#include <unistd.h>
+        -:   17:
+        -:   18:#include <cstdlib>
+        -:   19:#include <cstring>
+        -:   20:#include <getopt.h>
+        -:   21:#include <iostream>
+        -:   22:#include <sstream>
+        -:   23:#include <string>
+        -:   24:#include <limits>
+        -:   25:
+        -:   26:/**
+        -:   27: * @brief Send the entire buffer over a blocking socket, retrying on partial sends.
+        -:   28: *
+        -:   29: * @param fd Socket file descriptor to send on.
+        -:   30: * @param s String buffer to send (bytes sent are s.size()).
+        -:   31: * @return true if all bytes were sent, false on error.
+        -:   32: */
+       16:   33:static bool send_all_cli(int fd, const std::string &s)
+        -:   34:{
+       16:   35:    const char *p = s.data();
+       16:   36:    size_t left = s.size();
+       32:   37:    while (left)
+        -:   38:    {
+       16:   39:        ssize_t n = ::send(fd, p, left, 0);
+       16:   40:        if (n <= 0)
+    #####:   41:            return false;
+       16:   42:        p += n;
+       16:   43:        left -= n;
+        -:   44:    }
+       16:   45:    return true;
+        -:   46:}
+        -:   47:
+        -:   48:/**
+        -:   49: * @brief Receive all available data from a blocking socket until EOF.
+        -:   50: *
+        -:   51: * This function repeatedly calls recv(2) and appends data to a string until
+        -:   52: * the peer performs an orderly shutdown (recv returns 0) or an error occurs.
+        -:   53: *
+        -:   54: * @param fd Socket file descriptor to receive from.
+        -:   55: * @return std::string containing the received bytes (may be empty on error).
+        -:   56: */
+       16:   57:static std::string recv_all_cli(int fd)
+        -:   58:{
+       16:   59:    std::string out;
+        -:   60:    char buf[4096];
+        -:   61:    ssize_t n;
+       32:   62:    while ((n = ::recv(fd, buf, sizeof(buf), 0)) > 0)
+       16:   63:        out.append(buf, buf + n);
+       32:   64:    return out;
+    =====:   65:}
+        -:   66:
+        -:   67:/**
+        -:   68: * @brief Print usage information for the client.
+        -:   69: *
+        -:   70: * @param prog Program name (argv[0]) used in the usage message.
+        -:   71: */
+        4:   72:static void print_usage(const char *prog)
+        -:   73:{
+        -:   74:    std::cerr
+        -:   75:        << "Usage:\n"
+        -:   76:        << "  " << prog << " --random -v <vertices> -e <edges> -s <seed> [-d]\n"
+        -:   77:        << "  " << prog << " --manual -v <vertices> -e <edges> [-d]   <  edges on stdin\n\n"
+        -:   78:        << "Flags:\n"
+        -:   79:        << "  --random           Generate a random graph on server side\n"
+        -:   80:        << "  --manual           Send a manual graph (read edges from stdin)\n"
+        -:   81:        << "  -v <num>           Number of vertices (required in both modes)\n"
+        -:   82:        << "  -e <num>           Number of edges (required in --random)\n"
+        -:   83:        << "  -s <num>           Seed for RNG (required in --random)\n"
+        -:   84:        << "  -d                 Directed graph (optional; default undirected)\n"
+        4:   85:        << "\nNote: Server will run all 4 algorithms on the provided graph\n";
+        4:   86:}
+        -:   87:
+        -:   88:/**
+        -:   89: * @brief Program entry point for the client.
+        -:   90: *
+        -:   91: * Parses command-line arguments, constructs a textual protocol message and
+        -:   92: * sends it to the server; then prints the server response to stdout.
+        -:   93: *
+        -:   94: * @param argc Argument count.
+        -:   95: * @param argv Argument vector.
+        -:   96: * @return exit status: 0 on success, non-zero on error.
+        -:   97: */
+       21:   98:int main(int argc, char **argv)
+        -:   99:{
+       21:  100:    std::string host = "127.0.0.1";
+       21:  101:    int port = 8080;
+        -:  102:
+        -:  103:    enum Mode
+        -:  104:    {
+        -:  105:        NONE,
+        -:  106:        RANDOM,
+        -:  107:        MANUAL
+       21:  108:    } mode = NONE;
+       21:  109:    int vertices = -1, edges = -1, seed = -1;
+       21:  110:    bool directed = false;
+        -:  111:
+        -:  112:    // --- Pass 1: decide mode ---
+       21:  113:    opterr = 0; // don't auto-print errors
+        -:  114:    static option longopts[] = {
+        -:  115:        {"random", no_argument, nullptr, 1000},
+        -:  116:        {"manual", no_argument, nullptr, 1001},
+        -:  117:        {"vertices", required_argument, nullptr, 'v'},
+        -:  118:        {"edges", required_argument, nullptr, 'e'},
+        -:  119:        {"seed", required_argument, nullptr, 's'},
+        -:  120:        {"directed", no_argument, nullptr, 'd'},
+        -:  121:        {nullptr, 0, nullptr, 0}};
+        -:  122:
+        -:  123:    int c;
+       85:  124:    while ((c = getopt_long(argc, argv, ":v:e:s:d", longopts, nullptr)) != -1)
+        -:  125:    {
+       66:  126:        switch (c)
+        -:  127:        {
+        6:  128:        case 1000: // --random
+        6:  129:            if (mode == MANUAL)
+        -:  130:            {
+    #####:  131:                std::cerr << "ERROR: both --random and --manual given\n";
+    #####:  132:                return 2;
+        -:  133:            }
+        6:  134:            mode = RANDOM;
+        6:  135:            break;
+       14:  136:        case 1001: // --manual
+       14:  137:            if (mode == RANDOM)
+        -:  138:            {
+        1:  139:                std::cerr << "ERROR: both --random and --manual given\n";
+        1:  140:                return 2;
+        -:  141:            }
+       13:  142:            mode = MANUAL;
+       13:  143:            break;
+       19:  144:        case 'v':
+       19:  145:            vertices = std::stoi(optarg);
+       19:  146:            break;
+       18:  147:        case 'e':
+       18:  148:            edges = std::stoi(optarg);
+       18:  149:            break;
+        4:  150:        case 's':
+        4:  151:            seed = std::stoi(optarg);
+        4:  152:            break;
+        4:  153:        case 'd':
+        4:  154:            directed = true;
+        4:  155:            break;
+    #####:  156:        case ':': // missing argument
+    #####:  157:            std::cerr << "ERROR: option -" << char(optopt) << " requires an argument\n";
+    #####:  158:            print_usage(argv[0]);
+    #####:  159:            return 1;
+        1:  160:        default:
+        1:  161:            std::cerr << "ERROR: unknown option\n";
+        1:  162:            print_usage(argv[0]);
+        1:  163:            return 1;
+        -:  164:        }
+        -:  165:    }
+        -:  166:
+       19:  167:    if (mode == NONE)
+        -:  168:    {
+        1:  169:        std::cerr << "ERROR: must pass one of --random or --manual\n";
+        1:  170:        print_usage(argv[0]);
+        1:  171:        return 2;
+        -:  172:    }
+        -:  173:
+       36:  174:    std::ostringstream req;
+        -:  175:
+       18:  176:    if (mode == RANDOM)
+        -:  177:    {
+        -:  178:        // Check that all required parameters were provided
+        5:  179:        if (vertices == -1 || edges == -1 || seed == -1)
+        -:  180:        {
+        1:  181:            std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s seed [-d]\n";
+        1:  182:            print_usage(argv[0]);
+        1:  183:            return 1;
+        -:  184:        }
+        -:  185:
+        -:  186:        // If values are invalid
+        4:  187:        if (vertices <= 0 || edges < 0)
+        -:  188:        {
+        1:  189:            std::cerr << "ERROR: vertices must be >0 and edges >=0.\n";
+        -:  190:        }
+        -:  191:
+        -:  192:
+        -:  193:
+        -:  194:    // Protocol for random mode - send: RANDOM <vertices> <edges> <seed> <directed_flag>\n
+        4:  195:    req << "RANDOM" << ' ' << vertices << ' ' << edges << ' ' << seed << ' ' << directed << "\n";
+        -:  196:    }
+        -:  197:
+        -:  198:    else // (mode == MANUAL)
+        -:  199:    {
+        -:  200:        // Check that all required parameters were provided
+       13:  201:        if (vertices == -1 || edges == -1)
+        -:  202:        {
+        1:  203:            std::cerr << "Usage: " << argv[0] << " -v vertices -e edges -s [-d]\n";
+        1:  204:            print_usage(argv[0]);
+        1:  205:            return 1;
+        -:  206:        }
+        -:  207:
+       12:  208:        if (vertices <= 0)
+        -:  209:        {
+    #####:  210:            std::cerr << "ERROR: vertices must be >0.\n";
+    #####:  211:            return 1;
+        -:  212:        }
+        -:  213:
+       12:  214:        if (edges < 0)
+        -:  215:        {
+    #####:  216:            std::cerr << "ERROR: edges must be >=0\n";
+    #####:  217:            return 1;
+        -:  218:        }
+        -:  219:
+        -:  220:        // Read edges from stdin until EOF, pass through as-is.
+        -:  221:        // Expected per line: "u v [w]"
+       12:  222:        std::string edges_buf;
+       12:  223:        std::string line;
+       12:  224:        int count = 0;
+        -:  225:
+       38:  226:        while (count < edges && std::getline(std::cin, line))
+        -:  227:        {
+        -:  228:            // ignore pure empty lines in the middle to avoid accidental termination
+      26*:  229:            if (line.empty())
+    #####:  230:                continue;
+       26:  231:            edges_buf.append(line);
+       26:  232:            edges_buf.push_back('\n');
+       26:  233:            ++count;
+        -:  234:        }
+        -:  235:
+        -:  236:
+       12:  237:        req << "MANUAL" << ' ' << vertices << ' ' << edges << ' ' << directed << "\n";
+       12:  238:        req << edges_buf;
+       12:  239:        req << "\n";
+       12:  240:    }
+        -:  241:
+        -:  242:    // --- Networking ---
+       16:  243:    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+       16:  244:    if (fd < 0)
+        -:  245:    {
+    #####:  246:        perror("socket");
+    #####:  247:        return 1;
+        -:  248:    }
+       16:  249:    sockaddr_in addr{};
+       16:  250:    addr.sin_family = AF_INET;
+       16:  251:    addr.sin_port = htons(port);
+       16:  252:    if (::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1)
+        -:  253:    {
+    #####:  254:        std::cerr << "Bad host";
+    #####:  255:        return 1;
+        -:  256:    }
+       16:  257:    if (::connect(fd, (sockaddr *)&addr, sizeof(addr)) < 0)
+        -:  258:    {
+    #####:  259:        perror("connect");
+    #####:  260:        return 1;
+        -:  261:    }
+        -:  262:
+       32:  263:    std::string req_s = req.str();
+       16:  264:    if (!send_all_cli(fd, req_s))
+        -:  265:    {
+    #####:  266:        std::cerr << "send failed\n";
+    #####:  267:        return 1;
+        -:  268:    }
+       16:  269:    ::shutdown(fd, SHUT_WR);
+       16:  270:    std::string resp = recv_all_cli(fd);
+       16:  271:    ::close(fd);
+        -:  272:
+       16:  273:    std::cout << resp << std::endl ;
+       16:  274:    return 0;
+       21:  275:}

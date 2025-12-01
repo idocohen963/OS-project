@@ -1,0 +1,73 @@
+        -:    0:Source:algorithms/MST.cpp
+        -:    1:#include "MST.hpp"
+        -:    2:#include <limits.h>
+        -:    3:#include <vector>
+        -:    4:#include <string>
+        -:    5:
+        -:    6:/**
+        -:    7: * @brief Executes Prim's algorithm to find the minimum spanning tree.
+        -:    8: * @param graph The weighted graph to analyze
+        -:    9: * @return A string with the total MST weight or error message if disconnected
+        -:   10: * 
+        -:   11: * Prim's Algorithm:
+        -:   12: * 1. Start with vertex 0 in the MST
+        -:   13: * 2. Repeatedly add the minimum weight edge connecting MST to non-MST vertex
+        -:   14: * 3. Continue until all vertices are in the MST
+        -:   15: * 
+        -:   16: * For directed graphs, the algorithm considers edges in both directions
+        -:   17: * to effectively treat the graph as undirected.
+        -:   18: */
+       10:   19:std::string MST::run(const Graph::Graph& graph) {
+       10:   20:    int n = graph.getNumVertices();
+       10:   21:    std::vector<bool> inMST(n, false);      // Track which vertices are in MST
+       10:   22:    std::vector<int> minEdge(n, INT_MAX);   // Minimum edge weight to reach each vertex
+        -:   23:    
+       10:   24:    minEdge[0] = 0;    // Start from vertex 0
+       10:   25:    int totalWeight = 0;
+        -:   26:    
+        -:   27:    // Process all vertices
+       42:   28:    for (int i = 0; i < n; ++i) {
+       34:   29:        int u = -1;
+        -:   30:        
+        -:   31:        // Find the minimum weight vertex not yet in MST
+      192:   32:        for (int v = 0; v < n; ++v) {
+      158:   33:            if (!inMST[v] && (u == -1 || minEdge[v] < minEdge[u])) {
+       38:   34:                u = v;  // Update minimum vertex
+        -:   35:            }
+        -:   36:        }
+        -:   37:        
+        -:   38:        // If no reachable vertex found, graph is disconnected
+       34:   39:        if (minEdge[u] == INT_MAX) {
+        4:   40:            return "Graph not connected";
+        -:   41:        }
+        -:   42:        
+       32:   43:        inMST[u] = true;           // Add vertex u to MST
+       32:   44:        totalWeight += minEdge[u]; // Add edge weight to total
+        -:   45:        
+        -:   46:        // Update minimum edge weights for remaining vertices
+      176:   47:        for (int v = 0; v < n; ++v) {
+      144:   48:            if (!inMST[v]) {
+        -:   49:                // Check edges in both directions for directed graphs
+       66:   50:                int w1 = graph.getEdgeWeight(u, v);  // Edge from u to v
+       66:   51:                int w2 = graph.getEdgeWeight(v, u);  // Edge from v to u
+       66:   52:                int w = 0;
+        -:   53:                
+        -:   54:                // Determine the effective edge weight between u and v
+       66:   55:                if (w1 > 0 && w2 > 0) {
+       19:   56:                    w = std::min(w1, w2);  // Take minimum if both directions exist
+       47:   57:                } else if (w1 > 0) {
+        7:   58:                    w = w1;  // Only u->v edge exists
+       40:   59:                } else if (w2 > 0) {
+        3:   60:                    w = w2;  // Only v->u edge exists
+        -:   61:                }
+        -:   62:                
+        -:   63:                // Update minimum edge to vertex v if we found a better edge
+       66:   64:                if (w > 0 && w < minEdge[v]) {
+       22:   65:                    minEdge[v] = w;
+        -:   66:                }
+        -:   67:            }
+        -:   68:        }
+        -:   69:    }
+        -:   70:    
+        8:   71:    return "MST total weight: " + std::to_string(totalWeight);
+       10:   72:}

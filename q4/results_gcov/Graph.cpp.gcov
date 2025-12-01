@@ -1,0 +1,349 @@
+        -:    0:Source:Graph.cpp
+        -:    1:#include "Graph.hpp"
+        -:    2:#include <iostream>
+        -:    3:#include <stdexcept>
+        -:    4:#include <algorithm>
+        -:    5:#include <stack>
+        -:    6:
+        -:    7:namespace Graph {
+        -:    8:
+        -:    9:/**
+        -:   10: * @brief Constructs a graph with a given number of vertices.
+        -:   11: * @param V Number of vertices
+        -:   12: * @param isDirected Whether the graph is directed (default: false)
+        -:   13: * @throws std::invalid_argument if V is negative or zero
+        -:   14: */
+        4:   15:Graph::Graph(int V, bool isDirected) : directed(isDirected), numVertices(V), adj(V) {
+        -:   16:    // Ensure the number of vertices is valid
+        4:   17:    if (V <= 0) {
+    #####:   18:        throw std::invalid_argument("Number of vertices must be positive");
+        -:   19:    }
+        -:   20:    
+        -:   21:    // The graph is represented using an adjacency list
+        -:   22:    // Each entry adj[v] is a list of pairs (u, w) where:
+        -:   23:    //   - u is a vertex adjacent to v
+        -:   24:    //   - w is the weight of the edge from v to u
+        -:   25:    // For undirected graphs, if (u, w) is in adj[v], then (v, w) is in adj[u]
+        -:   26:    // For directed graphs, (u, w) in adj[v] means an edge from v to u with weight w
+        4:   27:}
+        -:   28:
+        -:   29:/**
+        -:   30: * @brief Destructor for the graph.
+        -:   31: */
+        4:   32:Graph::~Graph() {
+        -:   33:    // Vector destructor automatically handles cleanup
+        4:   34:}
+        -:   35:
+        -:   36:/**
+        -:   37: * @brief Adds an edge from src to dest with a given weight (default 1).
+        -:   38: * @param src Source vertex
+        -:   39: * @param dest Destination vertex
+        -:   40: * @param weight Edge weight (default 1)
+        -:   41: * @throws std::out_of_range if src or dest are invalid vertex indices
+        -:   42: * @throws std::invalid_argument if edge already exists or if attempting to create a self-loop
+        -:   43: */
+       35:   44:void Graph::addEdge(int src, int dest, int weight) {
+        -:   45:    // Validate vertex indices
+       35:   46:    if (src < 0 || src >= numVertices) {
+    #####:   47:        throw std::out_of_range("Invalid source vertex");
+        -:   48:    }
+       35:   49:    if (dest < 0 || dest >= numVertices) {
+    #####:   50:        throw std::out_of_range("Invalid destination vertex");
+        -:   51:    }
+        -:   52:
+        -:   53:    // Prevent self-loops
+       35:   54:    if (src == dest) {
+    #####:   55:        throw std::invalid_argument("Self-loops are not allowed");
+        -:   56:    }
+        -:   57:
+        -:   58:    // Check if edge already exists and throw error if it does
+       35:   59:    if (hasEdge(src, dest)) {
+    #####:   60:        throw std::invalid_argument("Edge already exists");
+        -:   61:    }
+        -:   62:
+        -:   63:    // Add new edge: Store the destination vertex and the edge weight in the adjacency list
+       35:   64:    adj[src].push_back(std::make_pair(dest, weight));
+        -:   65:    
+        -:   66:    // For undirected graphs, add the reverse edge as well
+       35:   67:    if (!directed && src != dest) {
+       23:   68:        adj[dest].push_back(std::make_pair(src, weight));
+        -:   69:    }
+       35:   70:}
+        -:   71:
+        -:   72:/**
+        -:   73: * @brief Checks if there is an edge from src to dest.
+        -:   74: * @param src Source vertex
+        -:   75: * @param dest Destination vertex
+        -:   76: * @return true if the edge exists, false otherwise
+        -:   77: * @throws std::out_of_range if src or dest are invalid vertex indices
+        -:   78: */
+       77:   79:bool Graph::hasEdge(int src, int dest) const {
+        -:   80:    // Validate vertex indices
+       77:   81:    if (src < 0 || src >= numVertices) {
+    #####:   82:        throw std::out_of_range("Invalid source vertex");
+        -:   83:    }
+       77:   84:    if (dest < 0 || dest >= numVertices) {
+    #####:   85:        throw std::out_of_range("Invalid destination vertex");
+        -:   86:    }
+        -:   87:
+        -:   88:    // Search for the edge in the adjacency list of src
+      159:   89:    for (size_t i = 0; i < adj[src].size(); i++) {
+       89:   90:        if (adj[src][i].first == dest) {
+        -:   91:            return true;
+        -:   92:        }
+        -:   93:    }
+        -:   94:    return false;
+        -:   95:}
+        -:   96:
+        -:   97:/**
+        -:   98: * @brief Returns the number of vertices in the graph.
+        -:   99: * @return Number of vertices
+        -:  100: */
+    #####:  101:int Graph::getNumVertices() const {
+    #####:  102:    return numVertices;
+        -:  103:}
+        -:  104:
+        -:  105:/**
+        -:  106: * @brief Checks if the graph is directed.
+        -:  107: * @return true if the graph is directed, false otherwise
+        -:  108: */
+    #####:  109:bool Graph::isDirected() const {
+    #####:  110:    return directed;
+        -:  111:}
+        -:  112:
+        -:  113:/**
+        -:  114: * @brief Returns the weight of the edge from src to dest.
+        -:  115: * @param src Source vertex
+        -:  116: * @param dest Destination vertex
+        -:  117: * @return The edge weight, or -1 if the edge does not exist
+        -:  118: * @throws std::out_of_range if src or dest are invalid vertex indices
+        -:  119: */
+    #####:  120:int Graph::getEdgeWeight(int src, int dest) const {
+        -:  121:    // Validate vertex indices
+    #####:  122:    if (src < 0 || src >= numVertices) {
+    #####:  123:        throw std::out_of_range("Invalid source vertex");
+        -:  124:    }
+    #####:  125:    if (dest < 0 || dest >= numVertices) {
+    #####:  126:        throw std::out_of_range("Invalid destination vertex");
+        -:  127:    }
+        -:  128:
+        -:  129:    // Search for the edge in the adjacency list and return its weight
+    #####:  130:    for (size_t i = 0; i < adj[src].size(); i++) {
+    #####:  131:        if (adj[src][i].first == dest) {
+    #####:  132:            return adj[src][i].second;  // Return the weight of the edge
+        -:  133:        }
+        -:  134:    }
+        -:  135:    
+        -:  136:    return -1;
+        -:  137:}
+        -:  138:
+        -:  139:/**
+        -:  140: * @brief Prints the graph to stdout in adjacency-list format.
+        -:  141: * For undirected graphs, both directions are present in the adjacency lists.
+        -:  142: * Format: v -> (neighbor1, w=weight1), (neighbor2, w=weight2), ...
+        -:  143: */
+        4:  144:void Graph::printGraph() const {
+        -:  145:   
+       30:  146:    for (int v = 0; v < numVertices; ++v) {
+       26:  147:        std::cout << v << " -> ";  // Print vertex number
+       26:  148:        const auto &neighbors = adj[v];  // Get adjacency list for this vertex
+        -:  149:        
+        -:  150:        // Print all neighbors with their weights
+       84:  151:        for (size_t i = 0; i < neighbors.size(); ++i) {
+       58:  152:            std::cout << "(" << neighbors[i].first << ", w=" << neighbors[i].second << ")";
+       58:  153:            if (i + 1 < neighbors.size()) std::cout << ", ";
+        -:  154:        }
+        -:  155:        std::cout << std::endl;  
+        -:  156:    }
+        4:  157:}
+        -:  158:
+        -:  159:/**
+        -:  160: * @brief Returns degree (or out-degree in directed graphs).
+        -:  161: * @param v Vertex index
+        -:  162: * @return Number of edges connected to vertex v (out-degree for directed graphs)
+        -:  163: * @throws std::out_of_range if v is an invalid vertex index
+        -:  164: */
+       12:  165:int Graph::degree(int v) const {
+      12*:  166:    if (v < 0 || v >= numVertices) throw std::out_of_range("Invalid vertex");
+       12:  167:    return static_cast<int>(adj[v].size());
+        -:  168:}
+        -:  169:
+        -:  170:/**
+        -:  171: * @brief Returns in-degree (same as degree for undirected graphs).
+        -:  172: * @param v Vertex index
+        -:  173: * @return Number of incoming edges to vertex v (same as degree for undirected graphs)
+        -:  174: * @throws std::out_of_range if v is an invalid vertex index
+        -:  175: */
+        1:  176:int Graph::inDegree(int v) const {
+       1*:  177:    if (v < 0 || v >= numVertices) throw std::out_of_range("Invalid vertex");
+        -:  178:    // For undirected graphs, in-degree equals out-degree (both equal to the degree)
+       1*:  179:    if (!directed) return degree(v);
+        -:  180:
+        -:  181:    // For directed graphs, we need to count all edges pointing to v
+        -:  182:    int count = 0;
+        9:  183:    for (int u = 0; u < numVertices; ++u) {
+       20:  184:        for (auto &p : adj[u]) {
+       12:  185:            if (p.first == v) count++;
+        -:  186:        }
+        -:  187:    }
+        -:  188:    return count;
+        -:  189:}
+        -:  190:
+        -:  191:/**
+        -:  192: * @brief Performs a depth-first search traversal from a starting vertex.
+        -:  193: * @param start Starting vertex for the DFS traversal
+        -:  194: * @param visited Vector of boolean flags to track visited vertices
+        -:  195: * @throws std::out_of_range if start is an invalid vertex index (through calling functions)
+        -:  196: */
+        2:  197:void Graph::dfs(int start, std::vector<bool>& visited) const {
+        2:  198:    std::stack<int> st;
+        -:  199:    st.push(start);
+        2:  200:    visited[start] = true;  // Mark start vertex as visited
+        -:  201:
+       15:  202:    while (!st.empty()) {
+        -:  203:        // Pop a vertex from the stack
+       13:  204:        int v = st.top();
+        -:  205:        st.pop();
+        -:  206:        
+        -:  207:        // Visit all adjacent vertices that haven't been visited yet
+       59:  208:        for (auto &p : adj[v]) {
+       46:  209:            int u = p.first;  // Adjacent vertex
+       46:  210:            if (!visited[u]) {
+        -:  211:                visited[u] = true;  // Mark as visited
+        -:  212:                st.push(u);  // Add to stack for further exploration
+        -:  213:            }
+        -:  214:        }
+        -:  215:    }
+        2:  216:}
+        -:  217:
+        -:  218:/**
+        -:  219: * @brief Checks if the graph is connected.
+        -:  220: * @details For undirected graphs, checks if all non-isolated vertices are connected.
+        -:  221: *          For directed graphs, checks for weak connectivity (ignoring edge directions).
+        -:  222: * @return true if the graph is connected, false otherwise
+        -:  223: */
+        4:  224:bool Graph::isConnected() const {
+        -:  225:    // We need a non-isolated vertex as a starting point
+        4:  226:    int start = -1;
+        9:  227:    for (int i = 0; i < numVertices; ++i) {
+        8:  228:        if (!adj[i].empty()) {
+        3:  229:            start = i;
+        3:  230:            break;
+        -:  231:        }
+        -:  232:    }
+        -:  233:    
+        -:  234:    // If no vertex has edges, the graph is considered connected (empty graph)
+        4:  235:    if (start == -1) return true; 
+        -:  236:
+        3:  237:    std::vector<bool> visited(numVertices, false);
+        -:  238:
+        3:  239:    if (directed) {
+        -:  240:        // For directed graphs, we check weak connectivity
+        -:  241:        // A directed graph is weakly connected if replacing all directed edges with
+        -:  242:        // undirected edges produces a connected undirected graph
+        1:  243:        std::stack<int> st;
+        -:  244:        st.push(start);
+        -:  245:        visited[start] = true;
+        9:  246:        while (!st.empty()) {
+        8:  247:            int v = st.top(); st.pop();
+        -:  248:            
+        -:  249:            // Follow regular edges
+       20:  250:            for (auto &p : adj[v]) {
+       12:  251:                int u = p.first;
+       12:  252:                if (!visited[u]) { visited[u] = true; st.push(u); }
+        -:  253:            }
+        -:  254:            
+        -:  255:            // Also check reverse edges (treating the graph as undirected)
+       72:  256:            for (int u = 0; u < numVertices; ++u) {
+      160:  257:                for (auto &q : adj[u]) {
+       96:  258:                    if (q.first == v && !visited[u]) {
+        -:  259:                        visited[u] = true;
+        -:  260:                        st.push(u);
+        -:  261:                    }
+        -:  262:                }
+        -:  263:            }
+        -:  264:        }
+        -:  265:    } else {
+        -:  266:        // For undirected graphs, simple DFS is sufficient to check connectivity
+        2:  267:        dfs(start, visited);
+        -:  268:    }
+        -:  269:
+        -:  270:    // The graph is connected if all non-isolated vertices are reachable
+       24:  271:    for (int i = 0; i < numVertices; ++i) {
+       21:  272:        if (!adj[i].empty() && !visited[i]) return false;
+        -:  273:    }
+        -:  274:    return true;
+        -:  275:}
+        -:  276:
+        -:  277:/**
+        -:  278: * @brief Finds an Eulerian circuit in the graph using Hierholzer's algorithm.
+        -:  279: * @details For directed graphs, checks if in-degree equals out-degree for all vertices.
+        -:  280: *          For undirected graphs, checks if all vertices have even degree.
+        -:  281: *          Also verifies that the graph is connected.
+        -:  282: * @return A vector containing the vertices in the Eulerian circuit order,
+        -:  283: *         or an empty vector if no Eulerian circuit exists
+        -:  284: */
+        4:  285:std::vector<int> Graph::findEulerianCircuit() const {
+        -:  286:    
+        -:  287:    // 1. The graph must be connected (or weakly connected for directed graphs)
+       4*:  288:    if (!isConnected()) return {};
+        -:  289:
+        -:  290:    // 2. Check degree conditions:
+        -:  291:    //    - For directed graphs: in-degree must equal out-degree for all vertices
+        -:  292:    //      (balanced vertices condition)
+        -:  293:    //    - For undirected graphs: all vertices must have even degree
+        4:  294:    if (directed) {
+       1*:  295:        for (int v = 0; v < numVertices; ++v) {
+        1:  296:            if (inDegree(v) != degree(v)) return {};
+        -:  297:        }
+        -:  298:    } else {
+       13:  299:        for (int v = 0; v < numVertices; ++v) {
+       11:  300:            if (degree(v) % 2 != 0) return {};
+        -:  301:        }
+        -:  302:    }
+        -:  303:
+        -:  304:    // Hierholzer's algorithm implementation:
+        -:  305:    // This algorithm finds an Eulerian circuit by building a path and then
+        -:  306:    // integrating cycles found along the way
+        2:  307:    std::vector<std::vector<std::pair<int,int>>> tempAdj = adj; // copy to consume edges
+        -:  308:    std::vector<int> circuit;
+        2:  309:    std::stack<int> st;
+        -:  310:
+        -:  311:    // Find a starting vertex with edges
+        2:  312:    int start = 0;
+        7:  313:    while (start < numVertices && tempAdj[start].empty()) start++;
+        2:  314:    if (start == numVertices) return {}; // no edges at all
+        -:  315:
+        -:  316:    // Start the traversal
+        -:  317:    st.push(start);
+        8:  318:    while (!st.empty()) {
+        7:  319:        int v = st.top();
+        7:  320:        if (!tempAdj[v].empty()) {
+        -:  321:            // If vertex has unexplored edges, take one
+        3:  322:            int u = tempAdj[v].back().first;
+        -:  323:            tempAdj[v].pop_back(); // Remove the edge from v to u
+        -:  324:            
+        3:  325:            if (!directed) {
+        -:  326:                // For undirected graphs, we also need to remove the corresponding reverse edge
+        -:  327:                // from u to v to avoid traversing the same edge twice
+        3:  328:                auto &neigh = tempAdj[u];
+        4:  329:                for (auto it = neigh.begin(); it != neigh.end(); ++it) {
+        7:  330:                    if (it->first == v) { neigh.erase(it); break; }
+        -:  331:                }
+        -:  332:            }
+        -:  333:            // Move to the next vertex
+        -:  334:            st.push(u);
+        -:  335:        } else {
+        -:  336:            // If no more unexplored edges, add vertex to circuit and backtrack
+        4:  337:            circuit.push_back(v);
+        -:  338:            st.pop();
+        -:  339:        }
+        -:  340:    }
+        -:  341:
+        -:  342:    // Reverse the circuit to get the correct order
+        1:  343:    std::reverse(circuit.begin(), circuit.end());
+        -:  344:    return circuit;
+        2:  345:}
+        -:  346:
+        -:  347:}
+        -:  348:

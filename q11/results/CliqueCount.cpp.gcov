@@ -1,0 +1,70 @@
+        -:    0:Source:algorithms/CliqueCount.cpp
+        -:    1:#include "CliqueCount.hpp"
+        -:    2:#include <vector>
+        -:    3:#include <string>
+        -:    4:
+        -:    5:/**
+        -:    6: * @brief Counts all cliques of size 2-6 in the graph.
+        -:    7: * @param graph The graph to analyze for cliques
+        -:    8: * @return A string containing the total number of cliques found
+        -:    9: * 
+        -:   10: * Brute Force Clique Counting Algorithm:
+        -:   11: * 1. Use bit manipulation to generate all possible subsets of vertices
+        -:   12: * 2. Filter subsets to only consider those of size 2-6
+        -:   13: * 3. For each valid subset, check if it forms a clique
+        -:   14: * 4. A subset is a clique if every pair of vertices has an edge
+        -:   15: * 
+        -:   16:
+        -:   17: */
+       10:   18:std::string CliqueCount::run(const Graph::Graph& graph) {
+       10:   19:    int n = graph.getNumVertices();
+       10:   20:    int count = 0;
+        -:   21:    
+        -:   22:    // Enumerate all possible subsets using bit manipulation
+        -:   23:    // mask represents a subset: bit i is 1 if vertex i is in the subset
+     1190:   24:    for (int mask = 1; mask < (1 << n); ++mask) {
+     1180:   25:        std::vector<int> nodes;  // Store vertices in current subset
+        -:   26:        
+        -:   27:        // Extract vertices from the bit mask
+    12172:   28:        for (int i = 0; i < n; ++i) {
+    10992:   29:            if (mask & (1 << i)) {  // Check if bit i is set
+     5517:   30:                nodes.push_back(i); // Add vertex i to subset
+        -:   31:            }
+        -:   32:        }
+        -:   33:        
+        -:   34:        // Only consider subsets of size 2-6 (clique size constraints)
+     1180:   35:        if (nodes.size() < 2 || nodes.size() > 6) continue;
+        -:   36:        
+      962:   37:        bool isClique = true;  // Assume subset forms a clique until proven otherwise
+        -:   38:        
+        -:   39:        // Check if every pair of vertices in the subset has an edge
+     1019:   40:        for (size_t i = 0; i < nodes.size(); ++i) {
+     1276:   41:            for (size_t j = i + 1; j < nodes.size(); ++j) {
+     1219:   42:                bool hasForwardEdge = graph.hasEdge(nodes[i], nodes[j]);
+     1219:   43:                bool hasReverseEdge = graph.hasEdge(nodes[j], nodes[i]);
+        -:   44:                
+        -:   45:                // For undirected graphs: need edge in at least one direction (stored in both)
+        -:   46:                // For directed graphs: need edges in both directions for a complete subgraph
+     1219:   47:                if (graph.isDirected()) {
+       85:   48:                    if (!hasForwardEdge || !hasReverseEdge) {
+       75:   49:                        isClique = false;
+       75:   50:                        break;
+        -:   51:                    }
+        -:   52:                } else {
+     1134:   53:                    if (!hasForwardEdge) {
+      862:   54:                        isClique = false;
+      862:   55:                        break;
+        -:   56:                    }
+        -:   57:                }
+        -:   58:            }
+      994:   59:            if (!isClique) break;
+        -:   60:        }
+        -:   61:        
+        -:   62:        // If all pairs are connected, we found a clique
+      962:   63:        if (isClique) {
+       25:   64:            ++count;
+        -:   65:        }
+     1180:   66:    }
+        -:   67:    
+       10:   68:    return "Number of cliques (size 2-6): " + std::to_string(count);
+        -:   69:}
